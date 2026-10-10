@@ -1,0 +1,692 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#f6f5f2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#16181b" media="(prefers-color-scheme: dark)">
+<title>Wohnungssuche</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M4 15 16 5l12 10v12H19v-8h-6v8H4z' fill='%232f6f5e'/%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%232f6f5e'/%3E%3Cpath d='M6 16 16 8l10 8v10h-7v-6h-6v6H6z' fill='white'/%3E%3C/svg%3E">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+<style>
+:root {
+  --bg: #f6f5f2; --flaeche: #ffffff; --flaeche2: #efede8; --text: #1d1f22; --leise: #63676d;
+  --rand: #dcd9d2; --akzent: #2f6f5e; --akzent-text: #ffffff;
+  --warn-bg: #fff3d6; --warn-fg: #7a5200; --gut-bg: #e3f2ea; --gut-fg: #1f5e40;
+  --info-bg: #eceef1; --info-fg: #3d4450; --fehler-bg: #fde4e1; --fehler-fg: #8c2116;
+  --schatten: 0 1px 2px rgb(0 0 0 / .06), 0 2px 8px rgb(0 0 0 / .04);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #16181b; --flaeche: #1f2226; --flaeche2: #272b30; --text: #e9eaec; --leise: #a0a5ad;
+    --rand: #363b42; --akzent: #5fb39a; --akzent-text: #0f1a16;
+    --warn-bg: #3a2f14; --warn-fg: #f2cf7a; --gut-bg: #17332a; --gut-fg: #8fd8b5;
+    --info-bg: #2a2f36; --info-fg: #c5cbd3; --fehler-bg: #3d1d1a; --fehler-fg: #f3a99f;
+    --schatten: none; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #16181b; --flaeche: #1f2226; --flaeche2: #272b30; --text: #e9eaec; --leise: #a0a5ad;
+  --rand: #363b42; --akzent: #5fb39a; --akzent-text: #0f1a16;
+  --warn-bg: #3a2f14; --warn-fg: #f2cf7a; --gut-bg: #17332a; --gut-fg: #8fd8b5;
+  --info-bg: #2a2f36; --info-fg: #c5cbd3; --fehler-bg: #3d1d1a; --fehler-fg: #f3a99f;
+  --schatten: none; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+a { color: var(--akzent); }
+button, input, select, textarea { font: inherit; color: inherit; }
+.huelle { max-width: 860px; margin: 0 auto; padding: 0 16px 80px; }
+header { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--rand); }
+.kopf { display: flex; align-items: center; gap: 10px; padding: 10px 0 6px; }
+.kopf h1 { font-size: 18px; margin: 0; flex: 1; letter-spacing: -.01em; }
+.lauf-info { font-size: 12.5px; color: var(--leise); padding-bottom: 8px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.knopf { border: 1px solid var(--rand); background: var(--flaeche); border-radius: 9px; padding: 7px 12px;
+  cursor: pointer; white-space: nowrap; min-height: 36px; }
+.knopf:hover { border-color: var(--leise); }
+.knopf.haupt { background: var(--akzent); color: var(--akzent-text); border-color: var(--akzent); font-weight: 600; }
+.knopf.klein { padding: 4px 10px; min-height: 30px; font-size: 13.5px; }
+.knopf:disabled { opacity: .55; cursor: default; }
+.icon-knopf { display: inline-grid; place-items: center; border: 0; background: none; cursor: pointer; padding: 6px; border-radius: 8px; color: var(--leise); min-width: 36px; min-height: 36px; }
+.icon-knopf:hover { background: var(--flaeche2); }
+nav.reiter { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+nav.reiter::-webkit-scrollbar { display: none; }
+nav.reiter button { border: 0; background: none; padding: 9px 12px; cursor: pointer; color: var(--leise);
+  border-bottom: 2.5px solid transparent; white-space: nowrap; font-weight: 500; }
+nav.reiter button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--akzent); }
+.zaehler { display: inline-block; min-width: 20px; padding: 0 6px; border-radius: 10px; background: var(--flaeche2);
+  font-size: 12px; margin-left: 4px; color: var(--text); font-variant-numeric: tabular-nums; }
+.werkzeug { display: flex; gap: 8px; margin: 14px 0 4px; flex-wrap: wrap; }
+.werkzeug input[type=search] { flex: 1; min-width: 160px; padding: 8px 11px; border: 1px solid var(--rand);
+  border-radius: 9px; background: var(--flaeche); }
+.ortsgruppe h2 { font-size: 15px; margin: 22px 0 8px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.ortsgruppe h2 small { font-weight: 400; color: var(--leise); font-size: 12.5px; }
+.karte { background: var(--flaeche); border: 1px solid var(--rand); border-radius: 12px; box-shadow: var(--schatten);
+  padding: 12px 14px; margin-bottom: 10px; display: grid; grid-template-columns: 96px 1fr; gap: 12px; }
+.karte.ohne-bild { grid-template-columns: 1fr; }
+.karte.offline { opacity: .7; }
+.karte.blink { outline: 2px solid var(--akzent); }
+.bild { width: 96px; height: 76px; border-radius: 8px; object-fit: cover; background: var(--flaeche2); }
+.karte h3 { margin: 0 0 3px; font-size: 15px; line-height: 1.3; overflow-wrap: anywhere; }
+.ortzeile { color: var(--leise); font-size: 13px; margin-bottom: 6px; overflow-wrap: anywhere; }
+.zahlen { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 14px; font-variant-numeric: tabular-nums; margin-bottom: 7px; }
+.zahlen b { font-weight: 650; }
+.zahlen .preis { font-weight: 700; }
+.marken { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 7px; }
+.marke { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--info-bg); color: var(--info-fg); }
+.marke.warn { background: var(--warn-bg); color: var(--warn-fg); font-weight: 600; }
+.marke.gut { background: var(--gut-bg); color: var(--gut-fg); }
+.marke.fehler { background: var(--fehler-bg); color: var(--fehler-fg); font-weight: 600; }
+.hinweis { font-size: 12.5px; color: var(--leise); margin: 3px 0; overflow-wrap: anywhere; }
+.hinweis a { cursor: pointer; }
+.kurztext { font-size: 13px; color: var(--leise); margin: 4px 0 6px; display: none; }
+.karte.offen .kurztext { display: block; }
+.links { font-size: 13px; display: flex; flex-wrap: wrap; gap: 4px 10px; margin: 4px 0 8px; align-items: baseline; }
+.links a.haupt { font-weight: 600; }
+.links s { color: var(--leise); }
+.aktionen { display: flex; gap: 6px; flex-wrap: wrap; }
+.notiz { width: 100%; margin-top: 8px; padding: 8px; border-radius: 8px; border: 1px solid var(--rand);
+  background: var(--flaeche2); min-height: 60px; resize: vertical; }
+.notiz-text { font-size: 13px; background: var(--flaeche2); border-radius: 8px; padding: 6px 9px; margin: 4px 0 8px; white-space: pre-wrap; }
+.leer { text-align: center; color: var(--leise); padding: 40px 10px; }
+.tafel { background: var(--flaeche); border: 1px solid var(--rand); border-radius: 12px; padding: 14px 16px; margin: 14px 0; }
+.tafel h2 { font-size: 16px; margin: 0 0 10px; }
+.feld { margin-bottom: 14px; }
+.feld label.titel { display: block; font-weight: 600; margin-bottom: 4px; }
+.feld .hilfe { font-size: 12.5px; color: var(--leise); margin-top: 3px; }
+.feld input[type=number], .feld input[type=text], .feld input[type=password], .feld textarea {
+  width: 100%; padding: 8px 10px; border: 1px solid var(--rand); border-radius: 8px; background: var(--flaeche2); }
+.feld textarea { min-height: 70px; resize: vertical; }
+.reihe { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.haken { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px 12px; }
+.haken label { display: flex; gap: 7px; align-items: center; padding: 3px 0; }
+table.quellen { width: 100%; border-collapse: collapse; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+table.quellen th, table.quellen td { text-align: left; padding: 6px 6px; border-bottom: 1px solid var(--rand); vertical-align: top; }
+table.quellen td.z, table.quellen th.z { text-align: right; }
+.tabelle-huelle { overflow-x: auto; }
+details summary { cursor: pointer; }
+.meldung { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: var(--text); color: var(--bg);
+  padding: 9px 16px; border-radius: 10px; font-size: 14px; z-index: 20; max-width: calc(100% - 32px); box-shadow: 0 4px 14px rgb(0 0 0 / .2); }
+.punkt { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--leise); }
+.punkt.ok { background: #3c9a6e; } .punkt.warnung { background: #d29a1e; } .punkt.fehler { background: #d2493a; }
+.dreh { display: inline-block; width: 12px; height: 12px; border: 2px solid currentColor; border-right-color: transparent;
+  border-radius: 50%; animation: dreh .8s linear infinite; vertical-align: -2px; }
+@keyframes dreh { to { transform: rotate(360deg); } }
+@media (max-width: 520px) {
+  .karte { grid-template-columns: 1fr; }
+  .bild { width: 100%; height: 150px; }
+  .kopf h1 { font-size: 17px; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="huelle" style="padding-bottom:0">
+    <div class="kopf">
+      <h1>Wohnungssuche</h1>
+      <button class="knopf haupt klein" id="suche-knopf" title="Suche jetzt starten">Suche starten</button>
+      <button class="icon-knopf" id="thema-knopf" title="Hell/Dunkel" aria-label="Hell/Dunkel umschalten"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/></svg></button>
+      <button class="icon-knopf" id="einst-knopf" title="Verbindung" aria-label="Einstellungen"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+    </div>
+    <div class="lauf-info" id="lauf-info">Lade …</div>
+    <nav class="reiter" role="tablist" id="reiter"></nav>
+  </div>
+</header>
+<main class="huelle" id="inhalt"></main>
+<div class="meldung" id="meldung" hidden></div>
+
+<script>
+"use strict";
+// ---------------------------------------------------------------------------
+// Hilfen
+// ---------------------------------------------------------------------------
+const $ = (s, el = document) => el.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+const sicherUrl = (u) => (/^https?:\/\//i.test(u || "") ? u : null);
+const euro = (n) => (n == null ? "–" : "€ " + Math.round(n).toLocaleString("de-DE"));
+const zahl = (n, d = 0) => (n == null ? "–" : Number(n).toLocaleString("de-DE", {maximumFractionDigits: d}));
+const datum = (s) => { if (!s) return "–"; const d = new Date(s); return isNaN(d) ? s : d.toLocaleDateString("de-AT", {day: "2-digit", month: "2-digit", year: "numeric"}); };
+const zeit = (s) => { if (!s) return "–"; const d = new Date(s); return isNaN(d) ? s : d.toLocaleString("de-AT", {day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit"}); };
+const speicher = {
+  lies(k, std = null) { try { const v = localStorage.getItem("ws_" + k); return v == null ? std : JSON.parse(v); } catch { return std; } },
+  schreib(k, v) { try { localStorage.setItem("ws_" + k, JSON.stringify(v)); } catch {} },
+};
+let meldungTimer;
+function melde(text, dauer = 3200) {
+  const m = $("#meldung"); m.textContent = text; m.hidden = false;
+  clearTimeout(meldungTimer); meldungTimer = setTimeout(() => (m.hidden = true), dauer);
+}
+const b64 = {
+  kodiere(text) { const bytes = new TextEncoder().encode(text); let s = ""; bytes.forEach((b) => (s += String.fromCharCode(b))); return btoa(s); },
+  dekodiere(b) { const s = atob(b.replace(/\s/g, "")); return new TextDecoder().decode(Uint8Array.from(s, (c) => c.charCodeAt(0))); },
+};
+
+// ---------------------------------------------------------------------------
+// Verbindung: GitHub (Pages) oder lokaler Server
+// ---------------------------------------------------------------------------
+const GitHub = {
+  art: "github",
+  conf() { return speicher.lies("github", {}); },
+  bereit() { const c = this.conf(); return !!(c.besitzer && c.repo && c.token); },
+  async api(pfad, opt = {}) {
+    const c = this.conf();
+    const r = await fetch(`https://api.github.com/repos/${encodeURIComponent(c.besitzer)}/${encodeURIComponent(c.repo)}${pfad}`, {
+      ...opt, headers: {Authorization: `Bearer ${c.token}`, Accept: "application/vnd.github+json",
+                        "X-GitHub-Api-Version": "2022-11-28", ...(opt.headers || {})}});
+    if (!r.ok) {
+      const t = await r.text().catch(() => "");
+      const e = new Error(`GitHub ${r.status}: ${t.slice(0, 160)}`); e.status = r.status; throw e;
+    }
+    return r.status === 204 ? null : r;
+  },
+  async zweig() {
+    const c = this.conf();
+    if (c.zweig) return c.zweig;
+    const info = await (await this.api("")).json();
+    c.zweig = info.default_branch; speicher.schreib("github", c); return c.zweig;
+  },
+  async lies(pfad, mitSha = false) {
+    const ref = encodeURIComponent(await this.zweig());
+    try {
+      if (!mitSha) {
+        const r = await this.api(`/contents/${pfad}?ref=${ref}`, {headers: {Accept: "application/vnd.github.raw+json"}});
+        return {inhalt: await r.text()};
+      }
+      const j = await (await this.api(`/contents/${pfad}?ref=${ref}`)).json();
+      return {inhalt: b64.dekodiere(j.content || ""), sha: j.sha};
+    } catch (e) { if (e.status === 404) return {inhalt: null, sha: null}; throw e; }
+  },
+  async schreib(pfad, inhalt, sha, nachricht) {
+    const body = {message: nachricht, content: b64.kodiere(inhalt), branch: await this.zweig()};
+    if (sha) body.sha = sha;
+    const j = await (await this.api(`/contents/${pfad}`, {method: "PUT", body: JSON.stringify(body)})).json();
+    return j.content.sha;
+  },
+  async starteSuche() {
+    await this.api(`/actions/workflows/suche.yml/dispatches`, {method: "POST", body: JSON.stringify({ref: await this.zweig()})});
+  },
+  async laufStatus() {
+    const j = await (await this.api(`/actions/workflows/suche.yml/runs?per_page=1`)).json();
+    const r = (j.workflow_runs || [])[0];
+    return r ? {laeuft: r.status !== "completed", ergebnis: r.conclusion, start: r.run_started_at || r.created_at, url: r.html_url} : null;
+  },
+};
+
+const Lokal = {
+  art: "lokal",
+  bereit() { return true; },
+  async lies(pfad) {
+    const r = await fetch("api/datei?pfad=" + encodeURIComponent(pfad));
+    if (r.status === 404) return {inhalt: null, sha: null};
+    if (!r.ok) throw new Error("Server " + r.status);
+    return r.json();
+  },
+  async schreib(pfad, inhalt, sha) {
+    const r = await fetch("api/datei?pfad=" + encodeURIComponent(pfad), {method: "PUT",
+      headers: {"Content-Type": "application/json"}, body: JSON.stringify({inhalt, sha})});
+    if (r.status === 409) { const e = new Error("Konflikt"); e.status = 409; throw e; }
+    if (!r.ok) throw new Error("Server " + r.status);
+    return (await r.json()).sha;
+  },
+  async starteSuche() { const r = await fetch("api/suche", {method: "POST"}); if (!r.ok) throw new Error("Server " + r.status); },
+  async laufStatus() { const r = await fetch("api/suche"); return r.ok ? r.json() : null; },
+};
+
+let quelle = GitHub;
+
+// ---------------------------------------------------------------------------
+// Zustand
+// ---------------------------------------------------------------------------
+const Z = {
+  daten: null,                 // export.json
+  status: {wohnungen: {}},     // status.json (Entscheidungen + Notizen)
+  statusSha: null,
+  offen: {},                   // noch nicht gespeicherte Änderungen {id: eintrag}
+  reiter: speicher.lies("reiter", "neu"),
+  filter: "",
+  laeuft: false,
+  notizOffen: null,
+};
+
+function statusVon(w) { return (Z.status.wohnungen[w.id] || {}).status || w.status; }
+function notizVon(w) { const s = Z.status.wohnungen[w.id]; return s && s.notiz != null ? s.notiz : w.notiz || ""; }
+
+async function ladeAlles() {
+  $("#lauf-info").textContent = "Lade Daten …";
+  try {
+    const [exp, st] = await Promise.all([quelle.lies("daten/export.json"), quelle.lies("daten/status.json", true)]);
+    Z.daten = exp.inhalt ? JSON.parse(exp.inhalt) : {wohnungen: [], laeufe: [], orte: []};
+    Z.status = st.inhalt ? JSON.parse(st.inhalt) : {wohnungen: {}};
+    Z.status.wohnungen = Z.status.wohnungen || {};
+    Z.statusSha = st.sha;
+    Object.assign(Z.status.wohnungen, Z.offen);
+    zeichne();
+    pruefeLauf();
+  } catch (e) {
+    $("#lauf-info").innerHTML = `<span class="marke fehler">Laden fehlgeschlagen</span> ${esc(e.message)}`;
+    if (e.status === 401 || e.status === 403 || e.status === 404) zeigeEinstellungen(e.message);
+  }
+}
+
+// Entscheidungen speichern (gesammelt, mit Konfliktbehandlung)
+let speicherTimer;
+function merkeStatus(id, aenderung) {
+  const alt = Z.status.wohnungen[id] || {};
+  const neu = {...alt, ...aenderung, zeit: new Date().toISOString()};
+  Z.status.wohnungen[id] = neu; Z.offen[id] = neu;
+  clearTimeout(speicherTimer); speicherTimer = setTimeout(speichereStatus, 1200);
+}
+async function speichereStatus(versuch = 0) {
+  const offen = {...Z.offen};
+  if (!Object.keys(offen).length) return;
+  try {
+    const aktuell = await quelle.lies("daten/status.json", true);
+    const doc = aktuell.inhalt ? JSON.parse(aktuell.inhalt) : {wohnungen: {}};
+    doc.wohnungen = doc.wohnungen || {};
+    for (const [id, e] of Object.entries(offen)) {
+      const da = doc.wohnungen[id];
+      if (!da || !da.zeit || da.zeit <= e.zeit) doc.wohnungen[id] = e;
+    }
+    const text = JSON.stringify(doc, null, 1) + "\n";
+    Z.statusSha = await quelle.schreib("daten/status.json", text, aktuell.sha, `Merkliste: ${Object.keys(offen).length} Änderung(en)`);
+    for (const id of Object.keys(offen)) if (Z.offen[id] === offen[id]) delete Z.offen[id];
+    Z.status = doc; Object.assign(Z.status.wohnungen, Z.offen);
+  } catch (e) {
+    if ((e.status === 409 || e.status === 422) && versuch < 3) return speichereStatus(versuch + 1);
+    melde("Speichern fehlgeschlagen – wird erneut versucht. " + e.message, 5000);
+    clearTimeout(speicherTimer); speicherTimer = setTimeout(speichereStatus, 8000);
+  }
+}
+window.addEventListener("beforeunload", (ev) => { if (Object.keys(Z.offen).length) { speichereStatus(); ev.preventDefault(); } });
+
+// ---------------------------------------------------------------------------
+// Darstellung
+// ---------------------------------------------------------------------------
+const REITER = [
+  {id: "neu", titel: "Neu"}, {id: "behalten", titel: "Behalten"}, {id: "entfernt", titel: "Entfernt"},
+  {id: "kriterien", titel: "Kriterien"}, {id: "laeufe", titel: "Läufe"},
+];
+
+function listeFuer(reiter) {
+  const ws = (Z.daten?.wohnungen || []);
+  if (reiter === "neu") return ws.filter((w) => w.passt && statusVon(w) === "neu");
+  return ws.filter((w) => statusVon(w) === reiter);
+}
+
+function zeichne() {
+  const nav = $("#reiter");
+  nav.innerHTML = REITER.map((r) => {
+    const n = ["neu", "behalten", "entfernt"].includes(r.id) ? `<span class="zaehler">${listeFuer(r.id).length}</span>` : "";
+    return `<button role="tab" data-reiter="${r.id}" aria-selected="${Z.reiter === r.id}">${r.titel}${n}</button>`;
+  }).join("");
+  zeichneLaufInfo();
+  const inhalt = $("#inhalt");
+  if (Z.reiter === "kriterien") return zeichneKriterien(inhalt);
+  if (Z.reiter === "laeufe") return zeichneLaeufe(inhalt);
+  zeichneListe(inhalt);
+}
+
+function zeichneLaufInfo() {
+  const l = (Z.daten?.laeufe || [])[0];
+  const el = $("#lauf-info");
+  if (!l) { el.textContent = Z.laeuft ? "" : "Noch kein Suchlauf – „Suche starten“ drücken."; }
+  else {
+    const fehler = l.quellen.filter((q) => q.status === "fehler");
+    const warn = l.quellen.filter((q) => q.status === "warnung");
+    const symbol = fehler.length ? "fehler" : warn.length ? "warnung" : "ok";
+    el.innerHTML = `<span class="punkt ${symbol}"></span> Letzter Lauf ${esc(zeit(l.start))} · ${l.neue_wohnungen} neu` +
+      (fehler.length ? ` · <a href="#" data-reiter-link="laeufe">${fehler.length} Quelle(n) mit Fehler</a>` : "") +
+      ` · <a href="#" data-reiter-link="laeufe">Details</a>`;
+  }
+  if (Z.laeuft) el.insertAdjacentHTML("afterbegin", `<span><span class="dreh"></span> Suche läuft …</span>`);
+}
+
+function wohnungPasstFilter(w) {
+  if (!Z.filter) return true;
+  const t = [w.titel, w.ort, w.adresse, w.anbieter, w.projekt, notizVon(w), ...(w.markierungen || []).map((m) => m.text)].join(" ").toLowerCase();
+  return Z.filter.toLowerCase().split(/\s+/).every((teil) => t.includes(teil));
+}
+
+function zeichneListe(inhalt) {
+  const liste = listeFuer(Z.reiter).filter(wohnungPasstFilter);
+  const orte = Z.daten?.orte || [];
+  const rang = Object.fromEntries(orte.map((o, i) => [o.name, i]));
+  const gruppen = {};
+  for (const w of liste) (gruppen[w.ort] = gruppen[w.ort] || []).push(w);
+  const namen = Object.keys(gruppen).sort((a, b) => (rang[a] ?? 99) - (rang[b] ?? 99) || a.localeCompare(b));
+  const wunsch = Z.daten?.weitere_wuensche;
+  let html = `<div class="werkzeug"><input type="search" id="filter" placeholder="Filtern (Ort, Stichwort, Markierung …)" value="${esc(Z.filter)}"></div>`;
+  if (wunsch && Z.reiter === "neu") html += `<div class="hinweis">Weitere Wünsche: ${esc(wunsch)}</div>`;
+  if (!liste.length) {
+    html += `<div class="leer">${Z.filter ? "Keine Treffer für den Filter." :
+      Z.reiter === "neu" ? "Keine neuen Wohnungen. Alles gesichtet!" : Z.reiter === "behalten" ? "Noch nichts behalten." : "Nichts entfernt."}</div>`;
+  }
+  for (const name of namen) {
+    const o = orte.find((x) => x.name === name);
+    const info = o ? (o.km ? `ca. ${zahl(o.km)} km · ${esc(o.anbindung)}` : esc(o.anbindung)) : "";
+    const ws = gruppen[name].sort((a, b) => (a.preis ?? 9e9) - (b.preis ?? 9e9));
+    html += `<section class="ortsgruppe"><h2>${esc(name || "Ort unbekannt")} <small>${info} · ${ws.length}</small></h2>${ws.map(karte).join("")}</section>`;
+  }
+  inhalt.innerHTML = html;
+  const f = $("#filter");
+  f.addEventListener("input", () => { Z.filter = f.value; const pos = f.selectionStart; zeichneListe(inhalt); const nf = $("#filter"); nf.focus(); nf.setSelectionRange(pos, pos); });
+}
+
+const QT = () => Z.daten?.quellen_titel || {};
+function linkHtml(l, haupt) {
+  const url = sicherUrl(l.url); if (!url) return "";
+  const name = esc(QT()[l.quelle] || l.quelle);
+  const preis = l.preis && haupt == null ? ` (${euro(l.preis)})` : "";
+  const text = l.offline ? `<s>${name}</s>` : name;
+  return `<a ${haupt ? 'class="haupt"' : ""} href="${esc(url)}" target="_blank" rel="noopener noreferrer">${haupt ? "Zum Inserat: " : ""}${text}${preis}</a>`;
+}
+
+function karte(w) {
+  const st = statusVon(w);
+  const bild = sicherUrl(w.bild);
+  const marken = (w.markierungen || []).map((m) => `<span class="marke ${m.art === "warn" ? "warn" : m.art === "gut" ? "gut" : ""}">${esc(m.text)}</span>`);
+  if ((w.moeglich_identisch || []).length) marken.unshift(`<span class="marke warn">möglicherweise identisch</span>`);
+  if (w.offline_seit) marken.unshift(`<span class="marke fehler">offline seit ${esc(datum(w.offline_seit))}</span>`);
+  if (!w.passt && st !== "neu") marken.push(`<span class="marke">passt nicht mehr: ${esc((w.ausschluss || []).join(", "))}</span>`);
+  const ortZeile = [w.ort, w.adresse, w.projekt && w.projekt !== w.adresse ? w.projekt : null, w.top ? "Top " + w.top : null, w.anbieter].filter(Boolean).map(esc).join(" · ");
+  const zahlen = [
+    `<span><b>${zahl(w.flaeche, 1)}</b> m²</span>`, `<span><b>${zahl(w.zimmer, 1)}</b> Zi.</span>`,
+    `<span class="preis">${euro(w.preis)}</span>`, `<span>${w.preis_m2 ? euro(w.preis_m2) + "/m²" : "–/m²"}</span>`,
+    `<span>Bj. ${w.baujahr ?? "?"}</span>`,
+  ].join("");
+  const hinweise = [];
+  if (w.preis_vorher) hinweise.push(`Preis geändert: vorher ${euro(w.preis_vorher)}`);
+  if (w.preisabweichung) hinweise.push(`Preise je Portal: ${esc(w.preisabweichung)}`);
+  if ((w.moeglich_identisch || []).length) {
+    const bekannt = w.moeglich_identisch.filter((m) => m.titel);
+    const rest = w.moeglich_identisch.length - bekannt.length;
+    hinweise.push("Möglicherweise identisch mit: " + [...bekannt.map((m) => `<a data-springe="${esc(m.id)}">${esc(m.titel)}</a>`),
+      ...(rest ? [`${rest} nicht passende${rest > 1 ? "n" : ""} Wohnung${rest > 1 ? "en" : ""}`] : [])].join(", "));
+  }
+  hinweise.push(`gefunden ${esc(datum(w.gefunden_am))}`);
+  const auchAuf = (w.links || []).map((l) => linkHtml(l, false)).filter(Boolean);
+  const notiz = notizVon(w);
+  const aktionen = st === "entfernt"
+    ? `<button class="knopf klein" data-aktion="neu">Wiederherstellen</button>`
+    : (st === "behalten" ? `<button class="knopf klein" data-aktion="neu">Zurück zu Neu</button>` : `<button class="knopf klein haupt" data-aktion="behalten">Behalten</button>`) +
+      `<button class="knopf klein" data-aktion="entfernt">Entfernen</button>`;
+  return `<article class="karte${bild ? "" : " ohne-bild"}${w.offline_seit ? " offline" : ""}" id="k-${esc(w.id)}" data-id="${esc(w.id)}">
+    ${bild ? `<img class="bild" src="${esc(bild)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove(); this.closest('.karte')?.classList.add('ohne-bild')">` : ""}
+    <div>
+      <h3>${esc(w.titel || "(ohne Titel)")}</h3>
+      <div class="ortzeile">${ortZeile}</div>
+      <div class="zahlen">${zahlen}</div>
+      ${marken.length ? `<div class="marken">${marken.join("")}</div>` : ""}
+      ${notiz && Z.notizOffen !== w.id ? `<div class="notiz-text">${esc(notiz)}</div>` : ""}
+      <div class="links">${linkHtml(w.hauptlink || {}, true)}${auchAuf.length ? ` <span>auch auf: ${auchAuf.join(", ")}</span>` : ""}</div>
+      <div class="hinweis">${hinweise.join(" · ")}</div>
+      ${w.kurztext ? `<div class="kurztext">${esc(w.kurztext)}</div>` : ""}
+      <div class="aktionen">${aktionen}
+        <button class="knopf klein" data-aktion="notiz">${notiz ? "Notiz ändern" : "Notiz"}</button>
+        ${w.kurztext ? `<button class="knopf klein" data-aktion="mehr">Text</button>` : ""}
+      </div>
+      ${Z.notizOffen === w.id ? `<textarea class="notiz" placeholder="Eigene Notiz (z. B. Besichtigung, Fragen an Makler)">${esc(notiz)}</textarea>
+        <div class="aktionen" style="margin-top:6px"><button class="knopf klein haupt" data-aktion="notiz-speichern">Notiz speichern</button></div>` : ""}
+    </div></article>`;
+}
+
+document.addEventListener("click", (ev) => {
+  const t = ev.target.closest("[data-reiter],[data-reiter-link],[data-aktion],[data-springe]");
+  if (!t) return;
+  if (t.dataset.reiter || t.dataset.reiterLink) {
+    ev.preventDefault(); Z.reiter = t.dataset.reiter || t.dataset.reiterLink; speicher.schreib("reiter", Z.reiter);
+    zeichne(); window.scrollTo({top: 0}); return;
+  }
+  if (t.dataset.springe) {
+    const ziel = document.getElementById("k-" + t.dataset.springe);
+    if (ziel) { ziel.scrollIntoView({behavior: "smooth", block: "center"}); ziel.classList.add("blink"); setTimeout(() => ziel.classList.remove("blink"), 1600); }
+    else melde("Diese Wohnung steht in einem anderen Reiter oder passt nicht zu den Kriterien.");
+    return;
+  }
+  const karteEl = t.closest(".karte"); if (!karteEl) return;
+  const id = karteEl.dataset.id, a = t.dataset.aktion;
+  if (["neu", "behalten", "entfernt"].includes(a)) {
+    merkeStatus(id, {status: a});
+    melde(a === "entfernt" ? "Entfernt – taucht nicht wieder auf." : a === "behalten" ? "Behalten." : "Wiederhergestellt.");
+    zeichne();
+  } else if (a === "notiz") { Z.notizOffen = id; zeichne(); $(`#k-${CSS.escape(id)} textarea`)?.focus(); }
+  else if (a === "notiz-speichern") {
+    const text = $(`#k-${CSS.escape(id)} textarea`).value.trim();
+    Z.notizOffen = null; merkeStatus(id, {notiz: text}); zeichne(); melde("Notiz gespeichert.");
+  } else if (a === "mehr") karteEl.classList.toggle("offen");
+});
+
+// ---------------------------------------------------------------------------
+// Kriterien
+// ---------------------------------------------------------------------------
+const ALLE_ORTE = ["Innsbruck", "Rum", "Völs", "Aldrans", "Natters", "Ampass", "Mutters", "Lans", "Thaur", "Sistrans",
+  "Götzens", "Hall in Tirol", "Absam", "Patsch", "Kematen in Tirol", "Axams", "Zirl"];
+const QUELLEN = ["willhaben", "immoscout24", "tt_immo", "derstandard", "weekend", "sreal", "zima"];
+let kriterienSha = null;
+
+async function zeichneKriterien(inhalt) {
+  inhalt.innerHTML = `<div class="tafel">Lade Kriterien …</div>`;
+  let k;
+  try {
+    const d = await quelle.lies("kriterien.yaml", true);
+    kriterienSha = d.sha;
+    k = jsyaml.load(d.inhalt || "") || {};
+  } catch (e) { inhalt.innerHTML = `<div class="tafel"><span class="marke fehler">Fehler</span> ${esc(e.message)}</div>`; return; }
+  if (Z.reiter !== "kriterien") return;
+  const liste = (a) => esc((a || []).join(", "));
+  const orte = [...new Set([...(k.orte || []), ...ALLE_ORTE])];
+  const quellen = [...new Set([...QUELLEN, ...Object.keys(k.quellen || {})])];
+  inhalt.innerHTML = `<form class="tafel" id="kform">
+    <h2>Kriterien</h2>
+    <div class="feld"><label class="titel">Orte</label><div class="haken">${orte.map((o) =>
+      `<label><input type="checkbox" name="ort" value="${esc(o)}" ${(k.orte || []).includes(o) ? "checked" : ""}> ${esc(o)}</label>`).join("")}</div>
+      <div class="hilfe">Innsbruck umfasst alle Stadtteile inkl. Igls. Weitere Orte in <code>orte.yaml</code> anlegen.</div></div>
+    <div class="reihe">
+      <div class="feld"><label class="titel" for="k-zimmer">Zimmer ab</label><input type="number" id="k-zimmer" step="0.5" value="${esc(k.zimmer_min ?? 4)}"></div>
+      <div class="feld"><label class="titel" for="k-flaeche">Fläche ab (m²)</label><input type="number" id="k-flaeche" value="${esc(k.flaeche_min ?? 80)}"></div>
+      <div class="feld"><label class="titel" for="k-preis">Preis bis (€)</label><input type="number" id="k-preis" step="5000" value="${esc(k.preis_max ?? 850000)}"></div>
+      <div class="feld"><label class="titel" for="k-knapp">„Knapp über Budget“ bis (€)</label><input type="number" id="k-knapp" step="5000" value="${esc(k.preis_knapp_max ?? 900000)}"></div>
+      <div class="feld"><label class="titel" for="k-baujahr">Baujahr ab</label><input type="number" id="k-baujahr" value="${esc(k.baujahr_min ?? 2000)}"></div>
+      <div class="feld"><label class="titel" for="k-vermietet">Befristet vermietet: max. Jahre</label><input type="number" id="k-vermietet" min="0" value="${esc(k.vermietet_max_jahre ?? 1)}">
+        <div class="hilfe">1 = Mietvertrag endet spätestens Ende nächsten Jahres</div></div>
+    </div>
+    <div class="feld haken" style="grid-template-columns:1fr">
+      <label><input type="checkbox" id="k-drei" ${k.drei_zimmer_mit_umbaupotenzial !== false ? "checked" : ""}> 3 Zimmer mit Umbaupotenzial aufnehmen („am Grundriss prüfen“)</label>
+      <label><input type="checkbox" id="k-verst" ${k.versteigerungen !== false ? "checked" : ""}> Versteigerungen aufnehmen (markiert)</label>
+      <label><input type="checkbox" id="k-gemein" ${k.gemeinnuetzig !== false ? "checked" : ""}> Gemeinnützige Bauträger aufnehmen (markiert)</label>
+    </div>
+    <div class="feld"><label class="titel" for="k-umbau">Stichworte für Umbaupotenzial</label><textarea id="k-umbau">${liste(k.umbau_stichworte)}</textarea><div class="hilfe">Kommagetrennt</div></div>
+    <div class="feld"><label class="titel" for="k-alt">Alt-Hinweise (führen ohne Baujahr zum Ausschluss)</label><textarea id="k-alt">${liste(k.alt_stichworte)}</textarea></div>
+    <div class="feld"><label class="titel" for="k-plus">Hervorheben (nur Anzeige)</label><input type="text" id="k-plus" value="${liste(k.hervorheben)}"></div>
+    <div class="feld"><label class="titel">Quellen</label><div class="haken">${quellen.map((q) =>
+      `<label><input type="checkbox" name="quelle" value="${esc(q)}" ${(k.quellen || {})[q] !== false ? "checked" : ""}> ${esc(QT()[q] || q)}</label>`).join("")}</div></div>
+    <div class="feld"><label class="titel" for="k-wunsch">Weitere Wünsche</label><textarea id="k-wunsch" placeholder="z. B. ruhige Lage, Süd-Balkon, max. 15 Min. mit dem Rad zur Arbeit">${esc(k.weitere_wuensche || "")}</textarea></div>
+    <div class="aktionen"><button class="knopf haupt" type="submit">Speichern</button>
+      <span class="hinweis">Gilt ab dem nächsten Suchlauf. Bereits gefundene Wohnungen werden dabei neu bewertet.</span></div>
+  </form>`;
+  $("#kform").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const teile = (s) => s.split(/[,\n]/).map((x) => x.trim()).filter(Boolean);
+    const neu = {
+      orte: [...document.querySelectorAll("input[name=ort]:checked")].map((x) => x.value),
+      zimmer_min: Number($("#k-zimmer").value), flaeche_min: Number($("#k-flaeche").value),
+      drei_zimmer_mit_umbaupotenzial: $("#k-drei").checked, umbau_stichworte: teile($("#k-umbau").value),
+      preis_max: Number($("#k-preis").value), preis_knapp_max: Number($("#k-knapp").value),
+      baujahr_min: Number($("#k-baujahr").value), alt_stichworte: teile($("#k-alt").value),
+      vermietet_max_jahre: Number($("#k-vermietet").value),
+      versteigerungen: $("#k-verst").checked, gemeinnuetzig: $("#k-gemein").checked,
+      hervorheben: teile($("#k-plus").value),
+      quellen: Object.fromEntries(quellen.map((q) => [q, !!document.querySelector(`input[name=quelle][value="${CSS.escape(q)}"]:checked`)])),
+      weitere_wuensche: $("#k-wunsch").value.trim(),
+    };
+    if (!neu.orte.length) { melde("Bitte mindestens einen Ort wählen."); return; }
+    try {
+      kriterienSha = await quelle.schreib("kriterien.yaml", kriterienYaml(neu), kriterienSha, "Kriterien über die Web-Oberfläche geändert");
+      melde("Kriterien gespeichert – gelten ab dem nächsten Lauf.");
+    } catch (e) {
+      melde(e.status === 409 || e.status === 422 ? "Datei wurde zwischenzeitlich geändert – bitte neu laden." : "Speichern fehlgeschlagen: " + e.message, 6000);
+    }
+  });
+}
+
+function kriterienYaml(k) {
+  const s = (x) => JSON.stringify(String(x));   // JSON-Strings sind gültiges YAML
+  const liste = (a) => (a.length ? "\n" + a.map((x) => "  - " + s(x)).join("\n") : " []");
+  const wunsch = k.weitere_wuensche ? "|\n" + k.weitere_wuensche.split("\n").map((z) => "  " + z).join("\n") : '""';
+  return `# Kriterien für die Wohnungssuche
+# Diese Datei kannst du hier auf GitHub direkt bearbeiten oder bequem über die
+# Web-Oberfläche (Reiter „Kriterien“). Änderungen gelten ab dem nächsten Lauf.
+
+# Gesuchte Orte (Namen wie in orte.yaml). Innsbruck umfasst alle Stadtteile inkl. Igls.
+orte:${liste(k.orte)}
+
+# Größe: 4+ Zimmer ab 80 m² – oder 3 Zimmer ab 80 m² mit Umbaupotenzial
+# (wird als „am Grundriss prüfen“ markiert).
+zimmer_min: ${k.zimmer_min}
+flaeche_min: ${k.flaeche_min}
+drei_zimmer_mit_umbaupotenzial: ${k.drei_zimmer_mit_umbaupotenzial}
+umbau_stichworte:${liste(k.umbau_stichworte)}
+
+# Preis in Euro: bis preis_max passt, bis preis_knapp_max als „knapp über Budget“.
+preis_max: ${k.preis_max}
+preis_knapp_max: ${k.preis_knapp_max}
+
+# Baujahr ab … oder Neubau/Erstbezug. Ohne Baujahr und ohne Alt-Hinweis: „Baujahr prüfen“.
+baujahr_min: ${k.baujahr_min}
+alt_stichworte:${liste(k.alt_stichworte)}
+
+# Befristet vermietet: ok, wenn der Mietvertrag spätestens Ende des Folgejahres endet.
+vermietet_max_jahre: ${k.vermietet_max_jahre}
+
+# Versteigerungen und gemeinnützige Bauträger aufnehmen (werden markiert)?
+versteigerungen: ${k.versteigerungen}
+gemeinnuetzig: ${k.gemeinnuetzig}
+
+# Stichworte, die auf der Karte hervorgehoben werden (nur Anzeige, kein Filter).
+hervorheben:${liste(k.hervorheben)}
+
+# Quellen ein-/ausschalten
+quellen:
+${Object.entries(k.quellen).map(([q, an]) => `  ${q}: ${an}`).join("\n")}
+
+# Weitere Wünsche (Freitext, wird in der Oberfläche angezeigt)
+weitere_wuensche: ${wunsch}
+`;
+}
+
+// ---------------------------------------------------------------------------
+// Läufe
+// ---------------------------------------------------------------------------
+function zeichneLaeufe(inhalt) {
+  const laeufe = Z.daten?.laeufe || [];
+  if (!laeufe.length) { inhalt.innerHTML = `<div class="leer">Noch kein Suchlauf.</div>`; return; }
+  const l = laeufe[0];
+  const zeile = (q) => `<tr><td><span class="punkt ${esc(q.status)}"></span> ${esc(q.titel)}</td>
+    <td class="z">${q.status === "aus" ? "aus" : q.seiten}</td><td class="z">${q.detailseiten ?? ""}</td><td class="z">${q.inserate ?? ""}</td>
+    <td class="z">${q.kandidaten ?? ""}</td><td class="z">${q.dauer_s ? Math.round(q.dauer_s) + " s" : ""}</td></tr>
+    ${(q.fehler || []).length || (q.warnungen || []).length ? `<tr><td colspan="6">${(q.fehler || []).map((f) => `<div class="marke fehler" style="display:inline-block;margin:2px 0">${esc(f)}</div>`).join("")}
+      ${(q.warnungen || []).length ? `<details><summary class="hinweis">${q.warnungen.length} Hinweis(e)</summary>${q.warnungen.map((w) => `<div class="hinweis">${esc(w)}</div>`).join("")}</details>` : ""}</td></tr>` : ""}`;
+  inhalt.innerHTML = `<div class="tafel"><h2>Letzter Lauf: ${esc(zeit(l.start))}</h2>
+    <div class="hinweis">Auslöser: ${esc(l.ausloeser)} · Dauer bis ${esc(zeit(l.ende))} · ${l.neue_wohnungen} neue Wohnung(en) · ${l.passende_wohnungen} offen in „Neu“</div>
+    <div class="tabelle-huelle"><table class="quellen"><thead><tr><th>Quelle</th><th class="z">Seiten</th><th class="z">Details</th><th class="z">Inserate</th><th class="z">passend vorgefiltert</th><th class="z">Dauer</th></tr></thead>
+    <tbody>${l.quellen.map(zeile).join("")}</tbody></table></div></div>
+    <div class="tafel"><h2>Frühere Läufe</h2>${laeufe.slice(1).map((x) => {
+      const f = x.quellen.filter((q) => q.status === "fehler").map((q) => q.titel);
+      return `<div class="hinweis"><span class="punkt ${f.length ? "fehler" : "ok"}"></span> ${esc(zeit(x.start))} · ${x.neue_wohnungen} neu${f.length ? " · Fehler: " + esc(f.join(", ")) : ""}</div>`;
+    }).join("") || '<div class="hinweis">–</div>'}</div>
+    <div class="hinweis">Daten erzeugt ${esc(zeit(Z.daten.erzeugt))} · Verbindung: ${quelle.art === "github" ? "GitHub" : "lokaler Server"}</div>`;
+}
+
+// ---------------------------------------------------------------------------
+// Suche starten / Laufstatus
+// ---------------------------------------------------------------------------
+let laufTimer;
+async function pruefeLauf() {
+  try {
+    const s = await quelle.laufStatus();
+    const vorher = Z.laeuft;
+    Z.laeuft = !!(s && s.laeuft);
+    $("#suche-knopf").disabled = Z.laeuft;
+    zeichneLaufInfo();
+    if (vorher && !Z.laeuft) {
+      melde(s && s.ergebnis && s.ergebnis !== "success" ? "Suchlauf beendet mit Fehler – siehe „Läufe“." : "Suchlauf fertig – Daten werden geladen.");
+      setTimeout(ladeAlles, quelle.art === "github" ? 6000 : 500);
+    }
+    clearTimeout(laufTimer);
+    if (Z.laeuft) laufTimer = setTimeout(pruefeLauf, 15000);
+  } catch { /* Laufstatus ist optional */ }
+}
+$("#suche-knopf").addEventListener("click", async () => {
+  try {
+    $("#suche-knopf").disabled = true;
+    await quelle.starteSuche();
+    Z.laeuft = true; zeichneLaufInfo();
+    melde("Suche gestartet – dauert etwa 5–15 Minuten.");
+    clearTimeout(laufTimer); laufTimer = setTimeout(pruefeLauf, 10000);
+  } catch (e) {
+    $("#suche-knopf").disabled = false;
+    melde("Start fehlgeschlagen: " + e.message + (e.status === 403 ? " – Token braucht die Berechtigung „Actions: Read and write“." : ""), 7000);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Einstellungen (GitHub-Verbindung)
+// ---------------------------------------------------------------------------
+function zeigeEinstellungen(fehler) {
+  if (quelle.art !== "github") { melde("Lokaler Betrieb – keine Verbindungseinstellungen nötig."); return; }
+  const c = GitHub.conf();
+  const vorschlag = location.hostname.endsWith(".github.io") ? location.hostname.split(".")[0] : "";
+  Z.reiter = "einstellungen";
+  $("#reiter").querySelectorAll("button").forEach((b) => b.setAttribute("aria-selected", "false"));
+  $("#inhalt").innerHTML = `<form class="tafel" id="eform"><h2>Verbindung zum privaten Repository</h2>
+    ${fehler ? `<p><span class="marke fehler">Fehler</span> ${esc(fehler)}</p>` : ""}
+    <p class="hinweis">Die Daten liegen in deinem privaten GitHub-Repository. Diese Seite enthält selbst keine Daten.
+      Der Zugangsschlüssel wird nur in diesem Browser gespeichert. Anleitung: README, Abschnitt „Token anlegen“.</p>
+    <div class="reihe">
+      <div class="feld"><label class="titel" for="e-besitzer">GitHub-Benutzer</label><input type="text" id="e-besitzer" autocomplete="username" value="${esc(c.besitzer || vorschlag)}"></div>
+      <div class="feld"><label class="titel" for="e-repo">Repository</label><input type="text" id="e-repo" value="${esc(c.repo || "wohnungssuche")}"></div>
+    </div>
+    <div class="feld"><label class="titel" for="e-token">Zugangsschlüssel (Fine-grained Token)</label>
+      <input type="password" id="e-token" autocomplete="current-password" placeholder="github_pat_…" value="${esc(c.token || "")}">
+      <div class="hilfe">Nur für dieses Repository, Berechtigungen: Contents (Read and write), Actions (Read and write).</div></div>
+    <div class="feld"><label class="titel" for="e-zweig">Branch (leer = Standard)</label><input type="text" id="e-zweig" value="${esc(c.zweig || "")}"></div>
+    <div class="aktionen"><button class="knopf haupt" type="submit">Verbinden</button>
+      ${c.token ? `<button class="knopf" type="button" id="e-abmelden">Schlüssel auf diesem Gerät löschen</button>` : ""}</div>
+  </form>`;
+  $("#eform").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    speicher.schreib("github", {besitzer: $("#e-besitzer").value.trim(), repo: $("#e-repo").value.trim(),
+      token: $("#e-token").value.trim(), zweig: $("#e-zweig").value.trim()});
+    Z.reiter = "neu"; speicher.schreib("reiter", "neu");
+    await ladeAlles();
+  });
+  $("#e-abmelden")?.addEventListener("click", () => { speicher.schreib("github", {}); melde("Schlüssel gelöscht."); zeigeEinstellungen(); });
+}
+$("#einst-knopf").addEventListener("click", () => zeigeEinstellungen());
+
+// Hell/Dunkel
+function setzeThema(t) { if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme; }
+setzeThema(speicher.lies("thema"));
+$("#thema-knopf").addEventListener("click", () => {
+  const dunkel = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  const t = dunkel ? "light" : "dark"; setzeThema(t); speicher.schreib("thema", t);
+});
+
+// Start
+(async function start() {
+  if (location.protocol.startsWith("http") && !location.hostname.endsWith(".github.io")) {
+    try { const r = await fetch("api/info"); if (r.ok) quelle = Lokal; } catch {}
+  }
+  if (!["neu", "behalten", "entfernt", "kriterien", "laeufe"].includes(Z.reiter)) Z.reiter = "neu";
+  if (quelle.art === "github" && !GitHub.bereit()) { zeichne(); zeigeEinstellungen(); $("#lauf-info").textContent = "Nicht verbunden"; return; }
+  await ladeAlles();
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && !Object.keys(Z.offen).length) ladeAlles(); });
+})();
+</script>
+</body>
+</html>
