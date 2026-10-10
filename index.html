@@ -312,20 +312,21 @@ window.addEventListener("beforeunload", (ev) => { if (Object.keys(Z.offen).lengt
 // Darstellung
 // ---------------------------------------------------------------------------
 const REITER = [
-  {id: "neu", titel: "Neu"}, {id: "behalten", titel: "Behalten"}, {id: "entfernt", titel: "Entfernt"},
+  {id: "neu", titel: "Neu"}, {id: "drei", titel: "3 Zimmer"}, {id: "behalten", titel: "Behalten"}, {id: "entfernt", titel: "Entfernt"},
   {id: "kriterien", titel: "Kriterien"}, {id: "laeufe", titel: "Läufe"},
 ];
 
 function listeFuer(reiter) {
   const ws = (Z.daten?.wohnungen || []);
-  if (reiter === "neu") return ws.filter((w) => w.passt && statusVon(w) === "neu");
+  if (reiter === "neu") return ws.filter((w) => w.passt && statusVon(w) === "neu" && w.kategorie !== "drei");
+  if (reiter === "drei") return ws.filter((w) => w.passt && statusVon(w) === "neu" && w.kategorie === "drei");
   return ws.filter((w) => statusVon(w) === reiter);
 }
 
 function zeichne() {
   const nav = $("#reiter");
   nav.innerHTML = REITER.map((r) => {
-    const n = ["neu", "behalten", "entfernt"].includes(r.id) ? `<span class="zaehler">${listeFuer(r.id).length}</span>` : "";
+    const n = ["neu", "drei", "behalten", "entfernt"].includes(r.id) ? `<span class="zaehler">${listeFuer(r.id).length}</span>` : "";
     return `<button role="tab" data-reiter="${r.id}" aria-selected="${Z.reiter === r.id}">${r.titel}${n}</button>`;
   }).join("");
   zeichneLaufInfo();
@@ -370,7 +371,7 @@ function zeichneListe(inhalt) {
   if (wunsch && Z.reiter === "neu") html += `<div class="hinweis">Weitere Wünsche: ${esc(wunsch)}</div>`;
   if (!liste.length) {
     html += `<div class="leer">${Z.filter ? "Keine Treffer für den Filter." :
-      Z.reiter === "neu" ? "Keine neuen Wohnungen. Alles gesichtet!" : Z.reiter === "behalten" ? "Noch nichts behalten." : "Nichts entfernt."}</div>`;
+      Z.reiter === "neu" || Z.reiter === "drei" ? "Keine neuen Wohnungen. Alles gesichtet!" : Z.reiter === "behalten" ? "Noch nichts behalten." : "Nichts entfernt."}</div>`;
   }
   for (const name of namen) {
     const o = orte.find((x) => x.name === name);
@@ -397,6 +398,7 @@ function karte(w) {
   const bild = sicherUrl(w.bild);
   const marken = (w.markierungen || []).map((m) => `<span class="marke ${m.art === "warn" ? "warn" : m.art === "gut" ? "gut" : ""}">${esc(m.text)}</span>`);
   if (w.offline_seit) marken.unshift(`<span class="marke fehler">offline seit ${esc(datum(w.offline_seit))}</span>`);
+  if (w.kategorie === "drei" && Z.reiter !== "drei") marken.unshift(`<span class="marke">3 Zimmer</span>`);
   if (!w.passt && st !== "neu") marken.push(`<span class="marke">passt nicht mehr: ${esc((w.ausschluss || []).join(", "))}</span>`);
   const ortName = `<b>${esc(w.ort)}${w.ortsteil ? " – " + esc(w.ortsteil) : ""}</b>`;
   const ortZeile = [w.adresse && w.adresse !== w.ortsteil ? w.adresse : null, w.projekt && w.projekt !== w.adresse ? w.projekt : null, w.top ? "Top " + w.top : null, w.anbieter].filter(Boolean).map(esc).join(" · ");
@@ -491,12 +493,14 @@ async function zeichneKriterien(inhalt) {
       <div class="feld"><label class="titel" for="k-flaeche">Fläche ab (m²)</label><input type="number" id="k-flaeche" value="${esc(k.flaeche_min ?? 80)}"></div>
       <div class="feld"><label class="titel" for="k-preis">Preis bis (€)</label><input type="number" id="k-preis" step="5000" value="${esc(k.preis_max ?? 850000)}"></div>
       <div class="feld"><label class="titel" for="k-knapp">„Knapp über Budget“ bis (€)</label><input type="number" id="k-knapp" step="5000" value="${esc(k.preis_knapp_max ?? 900000)}"></div>
+      <div class="feld"><label class="titel" for="k-drei-min">Reiter „3 Zimmer“ ab m²</label><input type="number" id="k-drei-min" value="${esc(k.drei_zimmer_flaeche_min ?? 85)}">
+        <div class="hilfe">alle 3-Zimmer-Wohnungen ab dieser Fläche; 0 = aus</div></div>
       <div class="feld"><label class="titel" for="k-baujahr">Baujahr ab</label><input type="number" id="k-baujahr" value="${esc(k.baujahr_min ?? 2000)}"></div>
       <div class="feld"><label class="titel" for="k-vermietet">Befristet vermietet: max. Jahre</label><input type="number" id="k-vermietet" min="0" value="${esc(k.vermietet_max_jahre ?? 1)}">
         <div class="hilfe">1 = Mietvertrag endet spätestens Ende nächsten Jahres</div></div>
     </div>
     <div class="feld haken" style="grid-template-columns:1fr">
-      <label><input type="checkbox" id="k-drei" ${k.drei_zimmer_mit_umbaupotenzial !== false ? "checked" : ""}> 3 Zimmer mit Umbaupotenzial aufnehmen („am Grundriss prüfen“)</label>
+      <label><input type="checkbox" id="k-drei" ${k.drei_zimmer_mit_umbaupotenzial !== false ? "checked" : ""}> 3 Zimmer mit Umbaupotenzial aufnehmen („am Grundriss prüfen“, Reiter Neu)</label>
       <label><input type="checkbox" id="k-verst" ${k.versteigerungen !== false ? "checked" : ""}> Versteigerungen aufnehmen (markiert)</label>
       <label><input type="checkbox" id="k-gemein" ${k.gemeinnuetzig !== false ? "checked" : ""}> Gemeinnützige Bauträger aufnehmen (markiert)</label>
     </div>
@@ -515,7 +519,7 @@ async function zeichneKriterien(inhalt) {
     const neu = {
       orte: [...document.querySelectorAll("input[name=ort]:checked")].map((x) => x.value),
       zimmer_min: Number($("#k-zimmer").value), flaeche_min: Number($("#k-flaeche").value),
-      drei_zimmer_mit_umbaupotenzial: $("#k-drei").checked, umbau_stichworte: teile($("#k-umbau").value),
+      drei_zimmer_mit_umbaupotenzial: $("#k-drei").checked, drei_zimmer_flaeche_min: Number($("#k-drei-min").value), umbau_stichworte: teile($("#k-umbau").value),
       preis_max: Number($("#k-preis").value), preis_knapp_max: Number($("#k-knapp").value),
       baujahr_min: Number($("#k-baujahr").value), alt_stichworte: teile($("#k-alt").value),
       vermietet_max_jahre: Number($("#k-vermietet").value),
@@ -550,6 +554,8 @@ orte:${liste(k.orte)}
 zimmer_min: ${k.zimmer_min}
 flaeche_min: ${k.flaeche_min}
 drei_zimmer_mit_umbaupotenzial: ${k.drei_zimmer_mit_umbaupotenzial}
+# Eigener Reiter „3 Zimmer“: alle 3-Zimmer-Wohnungen ab dieser Fläche (0 = aus)
+drei_zimmer_flaeche_min: ${k.drei_zimmer_flaeche_min}
 umbau_stichworte:${liste(k.umbau_stichworte)}
 
 # Preis in Euro: bis preis_max passt, bis preis_knapp_max als „knapp über Budget“.
@@ -682,7 +688,7 @@ $("#thema-knopf").addEventListener("click", () => {
   if (location.protocol.startsWith("http") && !location.hostname.endsWith(".github.io")) {
     try { const r = await fetch("api/info"); if (r.ok) quelle = Lokal; } catch {}
   }
-  if (!["neu", "behalten", "entfernt", "kriterien", "laeufe"].includes(Z.reiter)) Z.reiter = "neu";
+  if (!["neu", "drei", "behalten", "entfernt", "kriterien", "laeufe"].includes(Z.reiter)) Z.reiter = "neu";
   if (quelle.art === "github" && !GitHub.bereit()) { zeichne(); zeigeEinstellungen(); $("#lauf-info").textContent = "Nicht verbunden"; return; }
   await ladeAlles();
   document.addEventListener("visibilitychange", () => { if (!document.hidden && !Object.keys(Z.offen).length) ladeAlles(); });
