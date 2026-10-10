@@ -64,7 +64,10 @@ nav.reiter button[aria-selected="true"] { color: var(--text); border-bottom-colo
 .werkzeug { display: flex; gap: 8px; margin: 14px 0 4px; flex-wrap: wrap; }
 .werkzeug input[type=search] { flex: 1; min-width: 160px; padding: 8px 11px; border: 1px solid var(--rand);
   border-radius: 9px; background: var(--flaeche); }
-.ortsgruppe h2 { font-size: 15px; margin: 22px 0 8px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.ortsgruppe { scroll-margin-top: 120px; }
+.ortsgruppe h2 { font-size: 18px; margin: 26px 0 10px; padding-bottom: 6px; border-bottom: 2px solid var(--akzent); display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.sprung { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0 0; }
+.sprung a { font-size: 13px; padding: 3px 10px; border-radius: 999px; background: var(--flaeche); border: 1px solid var(--rand); text-decoration: none; color: var(--text); }
 .ortsgruppe h2 small { font-weight: 400; color: var(--leise); font-size: 12.5px; }
 .karte { background: var(--flaeche); border: 1px solid var(--rand); border-radius: 12px; box-shadow: var(--schatten);
   padding: 12px 14px; margin-bottom: 10px; display: grid; grid-template-columns: 96px 1fr; gap: 12px; }
@@ -73,6 +76,7 @@ nav.reiter button[aria-selected="true"] { color: var(--text); border-bottom-colo
 .karte.blink { outline: 2px solid var(--akzent); }
 .bild { width: 96px; height: 76px; border-radius: 8px; object-fit: cover; background: var(--flaeche2); }
 .karte h3 { margin: 0 0 3px; font-size: 15px; line-height: 1.3; overflow-wrap: anywhere; }
+.ortzeile b { color: var(--text); font-weight: 600; }
 .ortzeile { color: var(--leise); font-size: 13px; margin-bottom: 6px; overflow-wrap: anywhere; }
 .zahlen { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 14px; font-variant-numeric: tabular-nums; margin-bottom: 7px; }
 .zahlen b { font-weight: 650; }
@@ -361,6 +365,8 @@ function zeichneListe(inhalt) {
   const namen = Object.keys(gruppen).sort((a, b) => (rang[a] ?? 99) - (rang[b] ?? 99) || a.localeCompare(b));
   const wunsch = Z.daten?.weitere_wuensche;
   let html = `<div class="werkzeug"><input type="search" id="filter" placeholder="Filtern (Ort, Stichwort, Markierung …)" value="${esc(Z.filter)}"></div>`;
+  if (namen.length > 1) html += `<nav class="sprung">${namen.map((n) =>
+    `<a href="#ort-${encodeURIComponent(n)}" data-ort-sprung="${esc(n)}">${esc(n || "?")} ${gruppen[n].length}</a>`).join("")}</nav>`;
   if (wunsch && Z.reiter === "neu") html += `<div class="hinweis">Weitere Wünsche: ${esc(wunsch)}</div>`;
   if (!liste.length) {
     html += `<div class="leer">${Z.filter ? "Keine Treffer für den Filter." :
@@ -370,7 +376,7 @@ function zeichneListe(inhalt) {
     const o = orte.find((x) => x.name === name);
     const info = o ? (o.km ? `ca. ${zahl(o.km)} km · ${esc(o.anbindung)}` : esc(o.anbindung)) : "";
     const ws = gruppen[name].sort((a, b) => (a.preis ?? 9e9) - (b.preis ?? 9e9));
-    html += `<section class="ortsgruppe"><h2>${esc(name || "Ort unbekannt")} <small>${info} · ${ws.length}</small></h2>${ws.map(karte).join("")}</section>`;
+    html += `<section class="ortsgruppe" id="ort-${encodeURIComponent(name)}"><h2>${esc(name || "Ort unbekannt")} <small>${info} · ${ws.length}</small></h2>${ws.map(karte).join("")}</section>`;
   }
   inhalt.innerHTML = html;
   const f = $("#filter");
@@ -390,10 +396,10 @@ function karte(w) {
   const st = statusVon(w);
   const bild = sicherUrl(w.bild);
   const marken = (w.markierungen || []).map((m) => `<span class="marke ${m.art === "warn" ? "warn" : m.art === "gut" ? "gut" : ""}">${esc(m.text)}</span>`);
-  if ((w.moeglich_identisch || []).length) marken.unshift(`<span class="marke warn">möglicherweise identisch</span>`);
   if (w.offline_seit) marken.unshift(`<span class="marke fehler">offline seit ${esc(datum(w.offline_seit))}</span>`);
   if (!w.passt && st !== "neu") marken.push(`<span class="marke">passt nicht mehr: ${esc((w.ausschluss || []).join(", "))}</span>`);
-  const ortZeile = [w.ort, w.adresse, w.projekt && w.projekt !== w.adresse ? w.projekt : null, w.top ? "Top " + w.top : null, w.anbieter].filter(Boolean).map(esc).join(" · ");
+  const ortName = `<b>${esc(w.ort)}${w.ortsteil ? " – " + esc(w.ortsteil) : ""}</b>`;
+  const ortZeile = [w.adresse && w.adresse !== w.ortsteil ? w.adresse : null, w.projekt && w.projekt !== w.adresse ? w.projekt : null, w.top ? "Top " + w.top : null, w.anbieter].filter(Boolean).map(esc).join(" · ");
   const zahlen = [
     `<span><b>${zahl(w.flaeche, 1)}</b> m²</span>`, `<span><b>${zahl(w.zimmer, 1)}</b> Zi.</span>`,
     `<span class="preis">${euro(w.preis)}</span>`, `<span>${w.preis_m2 ? euro(w.preis_m2) + "/m²" : "–/m²"}</span>`,
@@ -402,12 +408,6 @@ function karte(w) {
   const hinweise = [];
   if (w.preis_vorher) hinweise.push(`Preis geändert: vorher ${euro(w.preis_vorher)}`);
   if (w.preisabweichung) hinweise.push(`Preise je Portal: ${esc(w.preisabweichung)}`);
-  if ((w.moeglich_identisch || []).length) {
-    const bekannt = w.moeglich_identisch.filter((m) => m.titel);
-    const rest = w.moeglich_identisch.length - bekannt.length;
-    hinweise.push("Möglicherweise identisch mit: " + [...bekannt.map((m) => `<a data-springe="${esc(m.id)}">${esc(m.titel)}</a>`),
-      ...(rest ? [`${rest} nicht passende${rest > 1 ? "n" : ""} Wohnung${rest > 1 ? "en" : ""}`] : [])].join(", "));
-  }
   hinweise.push(`gefunden ${esc(datum(w.gefunden_am))}`);
   const auchAuf = (w.links || []).map((l) => linkHtml(l, false)).filter(Boolean);
   const notiz = notizVon(w);
@@ -419,7 +419,7 @@ function karte(w) {
     ${bild ? `<img class="bild" src="${esc(bild)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove(); this.closest('.karte')?.classList.add('ohne-bild')">` : ""}
     <div>
       <h3>${esc(w.titel || "(ohne Titel)")}</h3>
-      <div class="ortzeile">${ortZeile}</div>
+      <div class="ortzeile">${ortName}${ortZeile ? " · " + ortZeile : ""}</div>
       <div class="zahlen">${zahlen}</div>
       ${marken.length ? `<div class="marken">${marken.join("")}</div>` : ""}
       ${notiz && Z.notizOffen !== w.id ? `<div class="notiz-text">${esc(notiz)}</div>` : ""}
