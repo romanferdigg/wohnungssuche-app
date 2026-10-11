@@ -685,6 +685,7 @@ $("#thema-knopf").addEventListener("click", () => {
 
 // Start
 (async function start() {
+  try { navigator.storage?.persist?.(); } catch {}
   if (location.protocol.startsWith("http") && !location.hostname.endsWith(".github.io")) {
     try { const r = await fetch("api/info"); if (r.ok) quelle = Lokal; } catch {}
   }
