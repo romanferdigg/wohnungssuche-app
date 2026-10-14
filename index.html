@@ -182,7 +182,7 @@ const GitHub = {
   async api(pfad, opt = {}) {
     const c = this.conf();
     const r = await fetch(`https://api.github.com/repos/${encodeURIComponent(c.besitzer)}/${encodeURIComponent(c.repo)}${pfad}`, {
-      ...opt, headers: {Authorization: `Bearer ${c.token}`, Accept: "application/vnd.github+json",
+      cache: "no-store", ...opt, headers: {Authorization: `Bearer ${c.token}`, Accept: "application/vnd.github+json",
                         "X-GitHub-Api-Version": "2022-11-28", ...(opt.headers || {})}});
     if (!r.ok) {
       const t = await r.text().catch(() => "");
@@ -203,7 +203,7 @@ const GitHub = {
         const r = await this.api(`/contents/${pfad}?ref=${ref}`, {headers: {Accept: "application/vnd.github.raw+json"}});
         return {inhalt: await r.text()};
       }
-      const j = await (await this.api(`/contents/${pfad}?ref=${ref}`)).json();
+      const j = await (await this.api(`/contents/${pfad}?ref=${ref}&t=${Date.now()}`)).json();
       return {inhalt: b64.dekodiere(j.content || ""), sha: j.sha};
     } catch (e) { if (e.status === 404) return {inhalt: null, sha: null}; throw e; }
   },
@@ -292,25 +292,47 @@ function merkeStatus(id, aenderung) {
   Z.status.wohnungen[id] = neu; Z.offen[id] = neu;
   clearTimeout(speicherTimer); speicherTimer = setTimeout(speichereStatus, 1200);
 }
-async function speichereStatus(versuch = 0) {
+let speichertGerade = false;
+const warte = (ms) => new Promise((r) => setTimeout(r, ms));
+function mischeOffen(doc, offen) {
+  doc.wohnungen = doc.wohnungen || {};
+  for (const [id, e] of Object.entries(offen)) {
+    const da = doc.wohnungen[id];
+    if (!da || !da.zeit || da.zeit <= e.zeit) doc.wohnungen[id] = e;
+  }
+  return doc;
+}
+// Speichert gesammelte Änderungen. Nutzt die zuletzt bekannte Version (sha) der Datei;
+// nur bei einem Konflikt wird frisch gelesen (GitHub liefert kurz nach dem Schreiben
+// manchmal noch die alte Fassung aus – deshalb mit Pausen und mehreren Versuchen).
+async function speichereStatus() {
+  if (speichertGerade) { clearTimeout(speicherTimer); speicherTimer = setTimeout(speichereStatus, 800); return; }
   const offen = {...Z.offen};
   if (!Object.keys(offen).length) return;
+  speichertGerade = true;
+  let doc = mischeOffen(JSON.parse(JSON.stringify(Z.status || {wohnungen: {}})), offen);
+  let sha = Z.statusSha;
   try {
-    const aktuell = await quelle.lies("daten/status.json", true);
-    const doc = aktuell.inhalt ? JSON.parse(aktuell.inhalt) : {wohnungen: {}};
-    doc.wohnungen = doc.wohnungen || {};
-    for (const [id, e] of Object.entries(offen)) {
-      const da = doc.wohnungen[id];
-      if (!da || !da.zeit || da.zeit <= e.zeit) doc.wohnungen[id] = e;
+    for (let versuch = 0; ; versuch++) {
+      try {
+        const text = JSON.stringify(doc, null, 1) + "\n";
+        Z.statusSha = await quelle.schreib("daten/status.json", text, sha, `Merkliste: ${Object.keys(offen).length} Änderung(en)`);
+        for (const id of Object.keys(offen)) if (Z.offen[id] === offen[id]) delete Z.offen[id];
+        Z.status = doc; Object.assign(Z.status.wohnungen, Z.offen);
+        return;
+      } catch (e) {
+        if (!(e.status === 409 || e.status === 422) || versuch >= 6) throw e;
+        await warte(1500 * (versuch + 1));
+        const aktuell = await quelle.lies("daten/status.json", true);
+        sha = aktuell.sha;
+        doc = mischeOffen(aktuell.inhalt ? JSON.parse(aktuell.inhalt) : {wohnungen: {}}, offen);
+      }
     }
-    const text = JSON.stringify(doc, null, 1) + "\n";
-    Z.statusSha = await quelle.schreib("daten/status.json", text, aktuell.sha, `Merkliste: ${Object.keys(offen).length} Änderung(en)`);
-    for (const id of Object.keys(offen)) if (Z.offen[id] === offen[id]) delete Z.offen[id];
-    Z.status = doc; Object.assign(Z.status.wohnungen, Z.offen);
   } catch (e) {
-    if ((e.status === 409 || e.status === 422) && versuch < 3) return speichereStatus(versuch + 1);
-    melde("Speichern fehlgeschlagen – wird erneut versucht. " + e.message, 5000);
-    clearTimeout(speicherTimer); speicherTimer = setTimeout(speichereStatus, 8000);
+    melde("Änderung noch nicht gespeichert – neuer Versuch in 10 s. (" + e.message + ")", 5000);
+    clearTimeout(speicherTimer); speicherTimer = setTimeout(speichereStatus, 10000);
+  } finally {
+    speichertGerade = false;
   }
 }
 window.addEventListener("beforeunload", (ev) => { if (Object.keys(Z.offen).length) { speichereStatus(); ev.preventDefault(); } });
