@@ -172,12 +172,31 @@ const b64 = {
   dekodiere(b) { const s = atob(b.replace(/\s/g, "")); return new TextDecoder().decode(Uint8Array.from(s, (c) => c.charCodeAt(0))); },
 };
 
+// Anmelde-Link: https://…/#zugang=<base64 {b, r, t}> – der Teil nach # wird nie an einen Server gesendet
+function zugangAusLink() {
+  const m = location.hash.match(/zugang=([A-Za-z0-9_\-]+)/);
+  if (!m) return null;
+  try {
+    const d = JSON.parse(b64.dekodiere(m[1].replace(/-/g, "+").replace(/_/g, "/")));
+    return d.t ? {besitzer: d.b, repo: d.r, token: d.t} : null;
+  } catch { return null; }
+}
+function anmeldeLink(c) {
+  const roh = b64.kodiere(JSON.stringify({b: c.besitzer, r: c.repo, t: c.token})).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return location.origin + location.pathname + "#zugang=" + roh;
+}
+function speicherFunktioniert() {
+  try { localStorage.setItem("ws_test", "1"); const ok = localStorage.getItem("ws_test") === "1"; localStorage.removeItem("ws_test"); return ok; }
+  catch { return false; }
+}
+
 // ---------------------------------------------------------------------------
 // Verbindung: GitHub (Pages) oder lokaler Server
 // ---------------------------------------------------------------------------
 const GitHub = {
   art: "github",
-  conf() { return speicher.lies("github", {}); },
+  // Reihenfolge: Browser-Speicher, sonst Anmelde-Link (#zugang=…) aus der Adresse
+  conf() { const c = speicher.lies("github", null); return c && c.token ? c : (zugangAusLink() || c || {}); },
   bereit() { const c = this.conf(); return !!(c.besitzer && c.repo && c.token); },
   async api(pfad, opt = {}) {
     const c = this.conf();
@@ -693,11 +712,33 @@ function zeigeEinstellungen(fehler) {
     <div class="feld"><label class="titel" for="e-zweig">Branch (leer = Standard)</label><input type="text" id="e-zweig" value="${esc(c.zweig || "")}"></div>
     <div class="aktionen"><button class="knopf haupt" type="submit">Verbinden</button>
       ${c.token ? `<button class="knopf" type="button" id="e-abmelden">Schlüssel auf diesem Gerät löschen</button>` : ""}</div>
+    ${!speicherFunktioniert() ? `<p><span class="marke fehler">Achtung</span> Dieser Browser speichert nichts dauerhaft
+      (privater Modus oder in einer anderen App geöffnet). Öffne die Seite direkt in Safari/Chrome oder nutze den Anmelde-Link unten.</p>` : ""}
+    ${c.token ? `<div class="feld" style="margin-top:16px"><label class="titel">Anmelde-Link für deine Geräte</label>
+      <div class="hilfe">Fragt der Browser immer wieder nach dem Schlüssel (z. B. weil die Seite aus einer anderen App heraus geöffnet wird),
+        dann öffne diesen Link und lege ihn als Lesezeichen bzw. „Zum Startbildschirm“ ab – der Schlüssel steckt im Link.
+        <b>Den Link niemandem schicken</b>; der Schlüsselteil wird nicht an Server übertragen.</div>
+      <div class="aktionen" style="margin-top:6px"><button class="knopf" type="button" id="e-link">Anmelde-Link kopieren</button>
+        <a class="knopf" id="e-link-oeffnen" href="#">Link öffnen</a></div></div>` : ""}
   </form>`;
+  if (c.token) {
+    $("#e-link-oeffnen").href = anmeldeLink(c);
+    $("#e-link").addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(anmeldeLink(c)); melde("Anmelde-Link kopiert."); }
+      catch { prompt("Link kopieren:", anmeldeLink(c)); }
+    });
+    $("#e-link-oeffnen").addEventListener("click", (ev) => { ev.preventDefault(); location.href = anmeldeLink(c); location.reload(); });
+  }
   $("#eform").addEventListener("submit", async (ev) => {
     ev.preventDefault();
-    speicher.schreib("github", {besitzer: $("#e-besitzer").value.trim(), repo: $("#e-repo").value.trim(),
-      token: $("#e-token").value.trim(), zweig: $("#e-zweig").value.trim()});
+    const neu = {besitzer: $("#e-besitzer").value.trim(), repo: $("#e-repo").value.trim(),
+      token: $("#e-token").value.trim(), zweig: $("#e-zweig").value.trim()};
+    speicher.schreib("github", neu);
+    if ((speicher.lies("github", {}) || {}).token !== neu.token) {
+      // Browser speichert nicht – mit Anmelde-Link weiterarbeiten
+      history.replaceState(null, "", anmeldeLink(neu));
+      melde("Dieser Browser speichert nichts dauerhaft – bitte jetzt ein Lesezeichen setzen (Anmelde-Link ist in der Adresse).", 9000);
+    }
     Z.reiter = "neu"; speicher.schreib("reiter", "neu");
     await ladeAlles();
   });
@@ -716,6 +757,8 @@ $("#thema-knopf").addEventListener("click", () => {
 // Start
 (async function start() {
   try { navigator.storage?.persist?.(); } catch {}
+  const ausLink = zugangAusLink();
+  if (ausLink && !(speicher.lies("github", null) || {}).token) speicher.schreib("github", ausLink);
   if (location.protocol.startsWith("http") && !location.hostname.endsWith(".github.io")) {
     try { const r = await fetch("api/info"); if (r.ok) quelle = Lokal; } catch {}
   }
