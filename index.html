@@ -85,6 +85,8 @@ nav.reiter button[aria-selected="true"] { color: var(--text); border-bottom-colo
 .marke { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--info-bg); color: var(--info-fg); }
 .marke.warn { background: var(--warn-bg); color: var(--warn-fg); font-weight: 600; }
 .marke.gut { background: var(--gut-bg); color: var(--gut-fg); }
+.marke.frisch { background: var(--akzent); color: var(--akzent-text); font-weight: 600; }
+.karte.ist-frisch { border-color: var(--akzent); border-width: 2px; }
 .marke.fehler { background: var(--fehler-bg); color: var(--fehler-fg); font-weight: 600; }
 .hinweis { font-size: 12.5px; color: var(--leise); margin: 3px 0; overflow-wrap: anywhere; }
 .hinweis a { cursor: pointer; }
@@ -257,6 +259,11 @@ const Z = {
   notizOffen: null,
 };
 
+// „frisch“ = beim letzten Suchlauf erstmals gefunden
+function istFrisch(w) {
+  const l = (Z.daten?.laeufe || [])[0];
+  return !!(l && w.gefunden_am && l.start && w.gefunden_am >= l.start.slice(0, 10));
+}
 function statusVon(w) { return (Z.status.wohnungen[w.id] || {}).status || w.status; }
 function notizVon(w) { const s = Z.status.wohnungen[w.id]; return s && s.notiz != null ? s.notiz : w.notiz || ""; }
 
@@ -367,7 +374,7 @@ function zeichneListe(inhalt) {
   const wunsch = Z.daten?.weitere_wuensche;
   let html = `<div class="werkzeug"><input type="search" id="filter" placeholder="Filtern (Ort, Stichwort, Markierung …)" value="${esc(Z.filter)}"></div>`;
   if (namen.length > 1) html += `<nav class="sprung">${namen.map((n) =>
-    `<a href="#ort-${encodeURIComponent(n)}" data-ort-sprung="${esc(n)}">${esc(n || "?")} ${gruppen[n].length}</a>`).join("")}</nav>`;
+    `<a href="#ort-${encodeURIComponent(n)}" data-ort-sprung="${esc(n)}">${esc(n || "?")} ${gruppen[n].length}${gruppen[n].some(istFrisch) ? ` <b>+${gruppen[n].filter(istFrisch).length}</b>` : ""}</a>`).join("")}</nav>`;
   if (wunsch && Z.reiter === "neu") html += `<div class="hinweis">Weitere Wünsche: ${esc(wunsch)}</div>`;
   if (!liste.length) {
     html += `<div class="leer">${Z.filter ? "Keine Treffer für den Filter." :
@@ -376,7 +383,7 @@ function zeichneListe(inhalt) {
   for (const name of namen) {
     const o = orte.find((x) => x.name === name);
     const info = o ? (o.km ? `ca. ${zahl(o.km)} km · ${esc(o.anbindung)}` : esc(o.anbindung)) : "";
-    const ws = gruppen[name].sort((a, b) => (a.preis ?? 9e9) - (b.preis ?? 9e9));
+    const ws = gruppen[name].sort((a, b) => (istFrisch(b) - istFrisch(a)) || (a.preis ?? 9e9) - (b.preis ?? 9e9));
     html += `<section class="ortsgruppe" id="ort-${encodeURIComponent(name)}"><h2>${esc(name || "Ort unbekannt")} <small>${info} · ${ws.length}</small></h2>${ws.map(karte).join("")}</section>`;
   }
   inhalt.innerHTML = html;
@@ -398,6 +405,7 @@ function karte(w) {
   const bild = sicherUrl(w.bild);
   const marken = (w.markierungen || []).map((m) => `<span class="marke ${m.art === "warn" ? "warn" : m.art === "gut" ? "gut" : ""}">${esc(m.text)}</span>`);
   if (w.offline_seit) marken.unshift(`<span class="marke fehler">offline seit ${esc(datum(w.offline_seit))}</span>`);
+  if (istFrisch(w)) marken.unshift(`<span class="marke frisch">neu seit letztem Lauf</span>`);
   if (w.kategorie === "drei" && Z.reiter !== "drei") marken.unshift(`<span class="marke">3 Zimmer</span>`);
   if (!w.passt && st !== "neu") marken.push(`<span class="marke">passt nicht mehr: ${esc((w.ausschluss || []).join(", "))}</span>`);
   const ortName = `<b>${esc(w.ort)}${w.ortsteil ? " – " + esc(w.ortsteil) : ""}</b>`;
@@ -417,7 +425,7 @@ function karte(w) {
     ? `<button class="knopf klein" data-aktion="neu">Wiederherstellen</button>`
     : (st === "behalten" ? `<button class="knopf klein" data-aktion="neu">Zurück zu Neu</button>` : `<button class="knopf klein haupt" data-aktion="behalten">Behalten</button>`) +
       `<button class="knopf klein" data-aktion="entfernt">Entfernen</button>`;
-  return `<article class="karte${bild ? "" : " ohne-bild"}${w.offline_seit ? " offline" : ""}" id="k-${esc(w.id)}" data-id="${esc(w.id)}">
+  return `<article class="karte${istFrisch(w) ? " ist-frisch" : ""}${bild ? "" : " ohne-bild"}${w.offline_seit ? " offline" : ""}" id="k-${esc(w.id)}" data-id="${esc(w.id)}">
     ${bild ? `<img class="bild" src="${esc(bild)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove(); this.closest('.karte')?.classList.add('ohne-bild')">` : ""}
     <div>
       <h3>${esc(w.titel || "(ohne Titel)")}</h3>
