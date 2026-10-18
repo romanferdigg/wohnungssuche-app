@@ -58,6 +58,7 @@ nav.reiter { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
 nav.reiter::-webkit-scrollbar { display: none; }
 nav.reiter button { border: 0; background: none; padding: 9px 12px; cursor: pointer; color: var(--leise);
   border-bottom: 2.5px solid transparent; white-space: nowrap; font-weight: 500; }
+nav.unterreiter { border-bottom: 1px solid var(--rand); width: 100%; }
 nav.reiter button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--akzent); }
 .zaehler { display: inline-block; min-width: 20px; padding: 0 6px; border-radius: 10px; background: var(--flaeche2);
   font-size: 12px; margin-left: 4px; color: var(--text); font-variant-numeric: tabular-nums; }
@@ -278,10 +279,13 @@ const Z = {
   notizOffen: null,
 };
 
-// „frisch“ = beim letzten Suchlauf erstmals gefunden
+// „frisch“ = in den letzten 10 Tagen (bis zum letzten Suchlauf) erstmals gefunden
+const FRISCH_TAGE = 10;
 function istFrisch(w) {
   const l = (Z.daten?.laeufe || [])[0];
-  return !!(l && w.gefunden_am && l.start && w.gefunden_am >= l.start.slice(0, 10));
+  if (!l || !l.start || !w.gefunden_am) return false;
+  const grenze = new Date(l.start.slice(0, 10)); grenze.setDate(grenze.getDate() - (FRISCH_TAGE - 1));
+  return w.gefunden_am >= grenze.toISOString().slice(0, 10);
 }
 function statusVon(w) { return (Z.status.wohnungen[w.id] || {}).status || w.status; }
 function notizVon(w) { const s = Z.status.wohnungen[w.id]; return s && s.notiz != null ? s.notiz : w.notiz || ""; }
@@ -360,9 +364,11 @@ window.addEventListener("beforeunload", (ev) => { if (Object.keys(Z.offen).lengt
 // Darstellung
 // ---------------------------------------------------------------------------
 const REITER = [
-  {id: "neu", titel: "Neu"}, {id: "drei", titel: "3 Zimmer"}, {id: "behalten", titel: "Behalten"}, {id: "entfernt", titel: "Entfernt"},
-  {id: "kriterien", titel: "Kriterien"}, {id: "laeufe", titel: "Läufe"},
+  {id: "neu", titel: "Neu"}, {id: "drei", titel: "3 Zimmer"}, {id: "behalten", titel: "Merken"},
+  {id: "kontaktiert", titel: "Kontaktiert"}, {id: "entfernt", titel: "Papierkorb"},
 ];
+const EINSTELLUNGEN = [{id: "kriterien", titel: "Kriterien"}, {id: "laeufe", titel: "Läufe"}, {id: "verbindung", titel: "Verbindung"}];
+const LISTEN = REITER.map((r) => r.id);
 
 function listeFuer(reiter) {
   const ws = (Z.daten?.wohnungen || []);
@@ -374,13 +380,19 @@ function listeFuer(reiter) {
 function zeichne() {
   const nav = $("#reiter");
   nav.innerHTML = REITER.map((r) => {
-    const n = ["neu", "drei", "behalten", "entfernt"].includes(r.id) ? `<span class="zaehler">${listeFuer(r.id).length}</span>` : "";
+    const n = `<span class="zaehler">${listeFuer(r.id).length}</span>`;
     return `<button role="tab" data-reiter="${r.id}" aria-selected="${Z.reiter === r.id}">${r.titel}${n}</button>`;
   }).join("");
   zeichneLaufInfo();
   const inhalt = $("#inhalt");
-  if (Z.reiter === "kriterien") return zeichneKriterien(inhalt);
-  if (Z.reiter === "laeufe") return zeichneLaeufe(inhalt);
+  if (!LISTEN.includes(Z.reiter)) {
+    inhalt.innerHTML = `<div class="werkzeug"><nav class="reiter unterreiter">${EINSTELLUNGEN.map((e) =>
+      `<button data-reiter="${e.id}" aria-selected="${Z.reiter === e.id}">${e.titel}</button>`).join("")}</nav></div><div id="einst-inhalt"></div>`;
+    const ziel = $("#einst-inhalt");
+    if (Z.reiter === "kriterien") return zeichneKriterien(ziel);
+    if (Z.reiter === "laeufe") return zeichneLaeufe(ziel);
+    return zeichneVerbindung(ziel, Z.verbindungsFehler);
+  }
   zeichneListe(inhalt);
 }
 
@@ -419,12 +431,14 @@ function zeichneListe(inhalt) {
   if (wunsch && Z.reiter === "neu") html += `<div class="hinweis">Weitere Wünsche: ${esc(wunsch)}</div>`;
   if (!liste.length) {
     html += `<div class="leer">${Z.filter ? "Keine Treffer für den Filter." :
-      Z.reiter === "neu" || Z.reiter === "drei" ? "Keine neuen Wohnungen. Alles gesichtet!" : Z.reiter === "behalten" ? "Noch nichts behalten." : "Nichts entfernt."}</div>`;
+      Z.reiter === "neu" || Z.reiter === "drei" ? "Keine neuen Wohnungen. Alles gesichtet!" : ({behalten: "Noch nichts gemerkt.", kontaktiert: "Noch niemand kontaktiert.", entfernt: "Papierkorb ist leer."})[Z.reiter] || ""}</div>`;
   }
   for (const name of namen) {
     const o = orte.find((x) => x.name === name);
     const info = o ? (o.km ? `ca. ${zahl(o.km)} km · ${esc(o.anbindung)}` : esc(o.anbindung)) : "";
-    const ws = gruppen[name].sort((a, b) => (istFrisch(b) - istFrisch(a)) || (a.preis ?? 9e9) - (b.preis ?? 9e9));
+    const ws = gruppen[name].sort((a, b) => (istFrisch(b) - istFrisch(a))
+      || (istFrisch(a) && istFrisch(b) ? (b.gefunden_am || "").localeCompare(a.gefunden_am || "") : 0)
+      || (a.preis ?? 9e9) - (b.preis ?? 9e9));
     html += `<section class="ortsgruppe" id="ort-${encodeURIComponent(name)}"><h2>${esc(name || "Ort unbekannt")} <small>${info} · ${ws.length}</small></h2>${ws.map(karte).join("")}</section>`;
   }
   inhalt.innerHTML = html;
@@ -446,7 +460,7 @@ function karte(w) {
   const bild = sicherUrl(w.bild);
   const marken = (w.markierungen || []).map((m) => `<span class="marke ${m.art === "warn" ? "warn" : m.art === "gut" ? "gut" : ""}">${esc(m.text)}</span>`);
   if (w.offline_seit) marken.unshift(`<span class="marke fehler">offline seit ${esc(datum(w.offline_seit))}</span>`);
-  if (istFrisch(w)) marken.unshift(`<span class="marke frisch">neu seit letztem Lauf</span>`);
+  if (istFrisch(w)) marken.unshift(`<span class="marke frisch">neu · ${esc(datum(w.gefunden_am).slice(0, 6))}</span>`);
   if (w.kategorie === "drei" && Z.reiter !== "drei") marken.unshift(`<span class="marke">3 Zimmer</span>`);
   if (!w.passt && st !== "neu") marken.push(`<span class="marke">passt nicht mehr: ${esc((w.ausschluss || []).join(", "))}</span>`);
   const ortName = `<b>${esc(w.ort)}${w.ortsteil ? " – " + esc(w.ortsteil) : ""}</b>`;
@@ -462,10 +476,11 @@ function karte(w) {
   hinweise.push(`gefunden ${esc(datum(w.gefunden_am))}`);
   const auchAuf = (w.links || []).map((l) => linkHtml(l, false)).filter(Boolean);
   const notiz = notizVon(w);
-  const aktionen = st === "entfernt"
-    ? `<button class="knopf klein" data-aktion="neu">Wiederherstellen</button>`
-    : (st === "behalten" ? `<button class="knopf klein" data-aktion="neu">Zurück zu Neu</button>` : `<button class="knopf klein haupt" data-aktion="behalten">Behalten</button>`) +
-      `<button class="knopf klein" data-aktion="entfernt">Entfernen</button>`;
+  const k = (aktion, text, haupt) => `<button class="knopf klein${haupt ? " haupt" : ""}" data-aktion="${aktion}">${text}</button>`;
+  const aktionen = st === "entfernt" ? k("neu", "Wiederherstellen")
+    : st === "kontaktiert" ? k("behalten", "Zurück zu Merken") + k("entfernt", "Papierkorb")
+    : st === "behalten" ? k("kontaktiert", "Kontaktiert", true) + k("neu", "Zurück zu Neu") + k("entfernt", "Papierkorb")
+    : k("behalten", "Merken", true) + k("kontaktiert", "Kontaktiert") + k("entfernt", "Papierkorb");
   return `<article class="karte${istFrisch(w) ? " ist-frisch" : ""}${bild ? "" : " ohne-bild"}${w.offline_seit ? " offline" : ""}" id="k-${esc(w.id)}" data-id="${esc(w.id)}">
     ${bild ? `<img class="bild" src="${esc(bild)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove(); this.closest('.karte')?.classList.add('ohne-bild')">` : ""}
     <div>
@@ -501,9 +516,10 @@ document.addEventListener("click", (ev) => {
   }
   const karteEl = t.closest(".karte"); if (!karteEl) return;
   const id = karteEl.dataset.id, a = t.dataset.aktion;
-  if (["neu", "behalten", "entfernt"].includes(a)) {
+  if (["neu", "behalten", "kontaktiert", "entfernt"].includes(a)) {
     merkeStatus(id, {status: a});
-    melde(a === "entfernt" ? "Entfernt – taucht nicht wieder auf." : a === "behalten" ? "Behalten." : "Wiederhergestellt.");
+    melde({entfernt: "In den Papierkorb gelegt – taucht nicht wieder auf.", behalten: "Gemerkt.",
+           kontaktiert: "Als kontaktiert markiert.", neu: "Wiederhergestellt."}[a]);
     zeichne();
   } else if (a === "notiz") { Z.notizOffen = id; zeichne(); $(`#k-${CSS.escape(id)} textarea`)?.focus(); }
   else if (a === "notiz-speichern") {
@@ -517,7 +533,7 @@ document.addEventListener("click", (ev) => {
 // ---------------------------------------------------------------------------
 const ALLE_ORTE = ["Innsbruck", "Rum", "Völs", "Aldrans", "Natters", "Ampass", "Mutters", "Lans", "Thaur", "Sistrans",
   "Götzens", "Hall in Tirol", "Absam", "Patsch", "Kematen in Tirol", "Axams", "Zirl"];
-const QUELLEN = ["willhaben", "immoscout24", "tt_immo", "derstandard", "weekend", "sreal", "zima"];
+const QUELLEN = ["willhaben", "immoscout24", "tt_immo", "weekend", "sreal", "zima"];
 let kriterienSha = null;
 
 async function zeichneKriterien(inhalt) {
@@ -538,23 +554,18 @@ async function zeichneKriterien(inhalt) {
       `<label><input type="checkbox" name="ort" value="${esc(o)}" ${(k.orte || []).includes(o) ? "checked" : ""}> ${esc(o)}</label>`).join("")}</div>
       <div class="hilfe">Innsbruck umfasst alle Stadtteile inkl. Igls. Weitere Orte in <code>orte.yaml</code> anlegen.</div></div>
     <div class="reihe">
-      <div class="feld"><label class="titel" for="k-zimmer">Zimmer ab</label><input type="number" id="k-zimmer" step="0.5" value="${esc(k.zimmer_min ?? 4)}"></div>
+      <div class="feld"><label class="titel" for="k-zimmer">Zimmer ab (Reiter „Neu“)</label><input type="number" id="k-zimmer" step="0.5" value="${esc(k.zimmer_min ?? 4)}"></div>
       <div class="feld"><label class="titel" for="k-flaeche">Fläche ab (m²)</label><input type="number" id="k-flaeche" value="${esc(k.flaeche_min ?? 80)}"></div>
       <div class="feld"><label class="titel" for="k-preis">Preis bis (€)</label><input type="number" id="k-preis" step="5000" value="${esc(k.preis_max ?? 850000)}"></div>
       <div class="feld"><label class="titel" for="k-knapp">„Knapp über Budget“ bis (€)</label><input type="number" id="k-knapp" step="5000" value="${esc(k.preis_knapp_max ?? 900000)}"></div>
       <div class="feld"><label class="titel" for="k-drei-min">Reiter „3 Zimmer“ ab m²</label><input type="number" id="k-drei-min" value="${esc(k.drei_zimmer_flaeche_min ?? 85)}">
         <div class="hilfe">alle 3-Zimmer-Wohnungen ab dieser Fläche; 0 = aus</div></div>
       <div class="feld"><label class="titel" for="k-baujahr">Baujahr ab</label><input type="number" id="k-baujahr" value="${esc(k.baujahr_min ?? 2000)}"></div>
-      <div class="feld"><label class="titel" for="k-vermietet">Befristet vermietet: max. Jahre</label><input type="number" id="k-vermietet" min="0" value="${esc(k.vermietet_max_jahre ?? 1)}">
-        <div class="hilfe">1 = Mietvertrag endet spätestens Ende nächsten Jahres</div></div>
     </div>
     <div class="feld haken" style="grid-template-columns:1fr">
-      <label><input type="checkbox" id="k-drei" ${k.drei_zimmer_mit_umbaupotenzial !== false ? "checked" : ""}> 3 Zimmer mit Umbaupotenzial aufnehmen („am Grundriss prüfen“, Reiter Neu)</label>
       <label><input type="checkbox" id="k-verst" ${k.versteigerungen !== false ? "checked" : ""}> Versteigerungen aufnehmen (markiert)</label>
       <label><input type="checkbox" id="k-gemein" ${k.gemeinnuetzig !== false ? "checked" : ""}> Gemeinnützige Bauträger aufnehmen (markiert)</label>
     </div>
-    <div class="feld"><label class="titel" for="k-umbau">Stichworte für Umbaupotenzial</label><textarea id="k-umbau">${liste(k.umbau_stichworte)}</textarea><div class="hilfe">Kommagetrennt</div></div>
-    <div class="feld"><label class="titel" for="k-alt">Alt-Hinweise (führen ohne Baujahr zum Ausschluss)</label><textarea id="k-alt">${liste(k.alt_stichworte)}</textarea></div>
     <div class="feld"><label class="titel" for="k-plus">Hervorheben (nur Anzeige)</label><input type="text" id="k-plus" value="${liste(k.hervorheben)}"></div>
     <div class="feld"><label class="titel">Quellen</label><div class="haken">${quellen.map((q) =>
       `<label><input type="checkbox" name="quelle" value="${esc(q)}" ${(k.quellen || {})[q] !== false ? "checked" : ""}> ${esc(QT()[q] || q)}</label>`).join("")}</div></div>
@@ -568,10 +579,9 @@ async function zeichneKriterien(inhalt) {
     const neu = {
       orte: [...document.querySelectorAll("input[name=ort]:checked")].map((x) => x.value),
       zimmer_min: Number($("#k-zimmer").value), flaeche_min: Number($("#k-flaeche").value),
-      drei_zimmer_mit_umbaupotenzial: $("#k-drei").checked, drei_zimmer_flaeche_min: Number($("#k-drei-min").value), umbau_stichworte: teile($("#k-umbau").value),
+      drei_zimmer_flaeche_min: Number($("#k-drei-min").value),
       preis_max: Number($("#k-preis").value), preis_knapp_max: Number($("#k-knapp").value),
-      baujahr_min: Number($("#k-baujahr").value), alt_stichworte: teile($("#k-alt").value),
-      vermietet_max_jahre: Number($("#k-vermietet").value),
+      baujahr_min: Number($("#k-baujahr").value),
       versteigerungen: $("#k-verst").checked, gemeinnuetzig: $("#k-gemein").checked,
       hervorheben: teile($("#k-plus").value),
       quellen: Object.fromEntries(quellen.map((q) => [q, !!document.querySelector(`input[name=quelle][value="${CSS.escape(q)}"]:checked`)])),
@@ -593,30 +603,23 @@ function kriterienYaml(k) {
   const wunsch = k.weitere_wuensche ? "|\n" + k.weitere_wuensche.split("\n").map((z) => "  " + z).join("\n") : '""';
   return `# Kriterien für die Wohnungssuche
 # Diese Datei kannst du hier auf GitHub direkt bearbeiten oder bequem über die
-# Web-Oberfläche (Reiter „Kriterien“). Änderungen gelten ab dem nächsten Lauf.
+# Web-Oberfläche (Einstellungen → Kriterien). Änderungen gelten ab dem nächsten Lauf.
 
 # Gesuchte Orte (Namen wie in orte.yaml). Innsbruck umfasst alle Stadtteile inkl. Igls.
 orte:${liste(k.orte)}
 
-# Größe: 4+ Zimmer ab 80 m² – oder 3 Zimmer ab 80 m² mit Umbaupotenzial
-# (wird als „am Grundriss prüfen“ markiert).
+# Größe: Wohnungen ab zimmer_min Zimmern und flaeche_min m² (Reiter „Neu“).
 zimmer_min: ${k.zimmer_min}
 flaeche_min: ${k.flaeche_min}
-drei_zimmer_mit_umbaupotenzial: ${k.drei_zimmer_mit_umbaupotenzial}
-# Eigener Reiter „3 Zimmer“: alle 3-Zimmer-Wohnungen ab dieser Fläche (0 = aus)
+# 3-Zimmer-Wohnungen ab dieser Fläche erscheinen im Reiter „3 Zimmer“ (0 = aus).
 drei_zimmer_flaeche_min: ${k.drei_zimmer_flaeche_min}
-umbau_stichworte:${liste(k.umbau_stichworte)}
 
 # Preis in Euro: bis preis_max passt, bis preis_knapp_max als „knapp über Budget“.
 preis_max: ${k.preis_max}
 preis_knapp_max: ${k.preis_knapp_max}
 
-# Baujahr ab … oder Neubau/Erstbezug. Ohne Baujahr und ohne Alt-Hinweis: „Baujahr prüfen“.
+# Baujahr ab … (oder Neubau/Erstbezug). Ohne Baujahr: Markierung „Baujahr prüfen“.
 baujahr_min: ${k.baujahr_min}
-alt_stichworte:${liste(k.alt_stichworte)}
-
-# Befristet vermietet: ok, wenn der Mietvertrag spätestens Ende des Folgejahres endet.
-vermietet_max_jahre: ${k.vermietet_max_jahre}
 
 # Versteigerungen und gemeinnützige Bauträger aufnehmen (werden markiert)?
 versteigerungen: ${k.versteigerungen}
@@ -693,12 +696,15 @@ $("#suche-knopf").addEventListener("click", async () => {
 // Einstellungen (GitHub-Verbindung)
 // ---------------------------------------------------------------------------
 function zeigeEinstellungen(fehler) {
-  if (quelle.art !== "github") { melde("Lokaler Betrieb – keine Verbindungseinstellungen nötig."); return; }
+  Z.verbindungsFehler = fehler || null;
+  Z.reiter = "verbindung";
+  zeichne();
+}
+function zeichneVerbindung(ziel, fehler) {
+  if (quelle.art !== "github") { ziel.innerHTML = `<div class="tafel">Lokaler Betrieb – keine Verbindungseinstellungen nötig.</div>`; return; }
   const c = GitHub.conf();
   const vorschlag = location.hostname.endsWith(".github.io") ? location.hostname.split(".")[0] : "";
-  Z.reiter = "einstellungen";
-  $("#reiter").querySelectorAll("button").forEach((b) => b.setAttribute("aria-selected", "false"));
-  $("#inhalt").innerHTML = `<form class="tafel" id="eform"><h2>Verbindung zum privaten Repository</h2>
+  ziel.innerHTML = `<form class="tafel" id="eform"><h2>Verbindung zum privaten Repository</h2>
     ${fehler ? `<p><span class="marke fehler">Fehler</span> ${esc(fehler)}</p>` : ""}
     <p class="hinweis">Die Daten liegen in deinem privaten GitHub-Repository. Diese Seite enthält selbst keine Daten.
       Der Zugangsschlüssel wird nur in diesem Browser gespeichert. Anleitung: README, Abschnitt „Token anlegen“.</p>
@@ -739,12 +745,12 @@ function zeigeEinstellungen(fehler) {
       history.replaceState(null, "", anmeldeLink(neu));
       melde("Dieser Browser speichert nichts dauerhaft – bitte jetzt ein Lesezeichen setzen (Anmelde-Link ist in der Adresse).", 9000);
     }
-    Z.reiter = "neu"; speicher.schreib("reiter", "neu");
+    Z.reiter = "neu"; Z.verbindungsFehler = null; speicher.schreib("reiter", "neu");
     await ladeAlles();
   });
   $("#e-abmelden")?.addEventListener("click", () => { speicher.schreib("github", {}); melde("Schlüssel gelöscht."); zeigeEinstellungen(); });
 }
-$("#einst-knopf").addEventListener("click", () => zeigeEinstellungen());
+$("#einst-knopf").addEventListener("click", () => { Z.reiter = "kriterien"; speicher.schreib("reiter", Z.reiter); zeichne(); window.scrollTo({top: 0}); });
 
 // Hell/Dunkel
 function setzeThema(t) { if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme; }
@@ -762,7 +768,7 @@ $("#thema-knopf").addEventListener("click", () => {
   if (location.protocol.startsWith("http") && !location.hostname.endsWith(".github.io")) {
     try { const r = await fetch("api/info"); if (r.ok) quelle = Lokal; } catch {}
   }
-  if (!["neu", "drei", "behalten", "entfernt", "kriterien", "laeufe"].includes(Z.reiter)) Z.reiter = "neu";
+  if (![...LISTEN, ...EINSTELLUNGEN.map((e) => e.id)].includes(Z.reiter)) Z.reiter = "neu";
   if (quelle.art === "github" && !GitHub.bereit()) { zeichne(); zeigeEinstellungen(); $("#lauf-info").textContent = "Nicht verbunden"; return; }
   await ladeAlles();
   document.addEventListener("visibilitychange", () => { if (!document.hidden && !Object.keys(Z.offen).length) ladeAlles(); });
