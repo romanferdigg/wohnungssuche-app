@@ -277,15 +277,35 @@ const Z = {
   filter: "",
   laeuft: false,
   notizOffen: null,
+  sortierung: speicher.lies("sortierung", "preis"),
 };
 
-// „frisch“ = in den letzten 10 Tagen (bis zum letzten Suchlauf) erstmals gefunden
-const FRISCH_TAGE = 10;
+// „Neu für dich“ = gefunden seit deinem letzten Besuch auf diesem Gerät.
+// Ein neuer Besuch beginnt nach 3 Stunden ohne Aktivität; bis dahin bleiben die Markierungen.
+const BESUCH_PAUSE_MS = 3 * 60 * 60 * 1000;
+const besuch = (() => {
+  const jetzt = Date.now();
+  const b = speicher.lies("besuch", null);
+  if (!b || !b.letzte) { const neu = {basis: null, letzte: jetzt}; speicher.schreib("besuch", neu); return neu; }
+  if (jetzt - b.letzte > BESUCH_PAUSE_MS) b.basis = b.letzte;   // neuer Besuch: alles seit dem letzten zählt als neu
+  b.letzte = jetzt; speicher.schreib("besuch", b); return b;
+})();
+function merkeAktivitaet() { besuch.letzte = Date.now(); speicher.schreib("besuch", besuch); }
+document.addEventListener("click", merkeAktivitaet, {capture: true});
+document.addEventListener("visibilitychange", () => { if (!document.hidden) merkeAktivitaet(); });
+
+// Zeitpunkt, zu dem eine Wohnung gefunden wurde: Start des ersten Laufs an ihrem Fund-Tag
+function fundZeit(w) {
+  if (!w.gefunden_am) return 0;
+  const laeufe = (Z.daten?.laeufe || []).filter((l) => (l.start || "").startsWith(w.gefunden_am));
+  const start = laeufe.length ? laeufe[laeufe.length - 1].start : w.gefunden_am + "T00:00:00";
+  return new Date(start).getTime() || 0;
+}
 function istFrisch(w) {
+  if (besuch.basis) return fundZeit(w) > besuch.basis;
+  // erster Besuch auf diesem Gerät: Funde des letzten Laufs hervorheben
   const l = (Z.daten?.laeufe || [])[0];
-  if (!l || !l.start || !w.gefunden_am) return false;
-  const grenze = new Date(l.start.slice(0, 10)); grenze.setDate(grenze.getDate() - (FRISCH_TAGE - 1));
-  return w.gefunden_am >= grenze.toISOString().slice(0, 10);
+  return !!(l && w.gefunden_am && l.start && w.gefunden_am >= l.start.slice(0, 10));
 }
 function statusVon(w) { return (Z.status.wohnungen[w.id] || {}).status || w.status; }
 function notizVon(w) { const s = Z.status.wohnungen[w.id]; return s && s.notiz != null ? s.notiz : w.notiz || ""; }
@@ -425,7 +445,14 @@ function zeichneListe(inhalt) {
   for (const w of liste) (gruppen[w.ort] = gruppen[w.ort] || []).push(w);
   const namen = Object.keys(gruppen).sort((a, b) => (rang[a] ?? 99) - (rang[b] ?? 99) || a.localeCompare(b));
   const wunsch = Z.daten?.weitere_wuensche;
-  let html = `<div class="werkzeug"><input type="search" id="filter" placeholder="Filtern (Ort, Stichwort, Markierung …)" value="${esc(Z.filter)}"></div>`;
+  let html = `<div class="werkzeug"><input type="search" id="filter" placeholder="Filtern (Ort, Stichwort, Markierung …)" value="${esc(Z.filter)}">
+    <select id="sortierung" aria-label="Sortierung" class="knopf">
+      <option value="preis" ${Z.sortierung !== "datum" ? "selected" : ""}>Preis aufsteigend</option>
+      <option value="datum" ${Z.sortierung === "datum" ? "selected" : ""}>Neueste zuerst</option>
+    </select></div>`;
+  const frischAnzahl = liste.filter(istFrisch).length;
+  if (frischAnzahl) html += `<div class="hinweis"><span class="marke frisch">${frischAnzahl} neu für dich</span> ${besuch.basis
+    ? "seit deinem letzten Besuch am " + esc(zeit(new Date(besuch.basis).toISOString())) : "aus dem letzten Suchlauf"} – jeweils oben im Ort.</div>`;
   if (namen.length > 1) html += `<nav class="sprung">${namen.map((n) =>
     `<a href="#ort-${encodeURIComponent(n)}" data-ort-sprung="${esc(n)}">${esc(n || "?")} ${gruppen[n].length}${gruppen[n].some(istFrisch) ? ` <b>+${gruppen[n].filter(istFrisch).length}</b>` : ""}</a>`).join("")}</nav>`;
   if (wunsch && Z.reiter === "neu") html += `<div class="hinweis">Weitere Wünsche: ${esc(wunsch)}</div>`;
@@ -436,12 +463,14 @@ function zeichneListe(inhalt) {
   for (const name of namen) {
     const o = orte.find((x) => x.name === name);
     const info = o ? (o.km ? `ca. ${zahl(o.km)} km · ${esc(o.anbindung)}` : esc(o.anbindung)) : "";
+    const nachPreis = (a, b) => (a.preis ?? 9e9) - (b.preis ?? 9e9);
+    const nachDatum = (a, b) => (b.gefunden_am || "").localeCompare(a.gefunden_am || "") || nachPreis(a, b);
     const ws = gruppen[name].sort((a, b) => (istFrisch(b) - istFrisch(a))
-      || (istFrisch(a) && istFrisch(b) ? (b.gefunden_am || "").localeCompare(a.gefunden_am || "") : 0)
-      || (a.preis ?? 9e9) - (b.preis ?? 9e9));
+      || (Z.sortierung === "datum" ? nachDatum(a, b) : nachPreis(a, b)));
     html += `<section class="ortsgruppe" id="ort-${encodeURIComponent(name)}"><h2>${esc(name || "Ort unbekannt")} <small>${info} · ${ws.length}</small></h2>${ws.map(karte).join("")}</section>`;
   }
   inhalt.innerHTML = html;
+  $("#sortierung").addEventListener("change", (ev) => { Z.sortierung = ev.target.value; speicher.schreib("sortierung", Z.sortierung); zeichneListe(inhalt); });
   const f = $("#filter");
   f.addEventListener("input", () => { Z.filter = f.value; const pos = f.selectionStart; zeichneListe(inhalt); const nf = $("#filter"); nf.focus(); nf.setSelectionRange(pos, pos); });
 }
@@ -460,7 +489,7 @@ function karte(w) {
   const bild = sicherUrl(w.bild);
   const marken = (w.markierungen || []).map((m) => `<span class="marke ${m.art === "warn" ? "warn" : m.art === "gut" ? "gut" : ""}">${esc(m.text)}</span>`);
   if (w.offline_seit) marken.unshift(`<span class="marke fehler">offline seit ${esc(datum(w.offline_seit))}</span>`);
-  if (istFrisch(w)) marken.unshift(`<span class="marke frisch">neu · ${esc(datum(w.gefunden_am).slice(0, 6))}</span>`);
+  if (istFrisch(w)) marken.unshift(`<span class="marke frisch">neu für dich · ${esc(datum(w.gefunden_am).slice(0, 6))}</span>`);
   if (w.kategorie === "drei" && Z.reiter !== "drei") marken.unshift(`<span class="marke">3 Zimmer</span>`);
   if (!w.passt && st !== "neu") marken.push(`<span class="marke">passt nicht mehr: ${esc((w.ausschluss || []).join(", "))}</span>`);
   const ortName = `<b>${esc(w.ort)}${w.ortsteil ? " – " + esc(w.ortsteil) : ""}</b>`;
