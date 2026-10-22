@@ -280,32 +280,13 @@ const Z = {
   sortierung: speicher.lies("sortierung", "preis"),
 };
 
-// „Neu für dich“ = gefunden seit deinem letzten Besuch auf diesem Gerät.
-// Ein neuer Besuch beginnt nach 3 Stunden ohne Aktivität; bis dahin bleiben die Markierungen.
-const BESUCH_PAUSE_MS = 3 * 60 * 60 * 1000;
-const besuch = (() => {
-  const jetzt = Date.now();
-  const b = speicher.lies("besuch", null);
-  if (!b || !b.letzte) { const neu = {basis: null, letzte: jetzt}; speicher.schreib("besuch", neu); return neu; }
-  if (jetzt - b.letzte > BESUCH_PAUSE_MS) b.basis = b.letzte;   // neuer Besuch: alles seit dem letzten zählt als neu
-  b.letzte = jetzt; speicher.schreib("besuch", b); return b;
-})();
-function merkeAktivitaet() { besuch.letzte = Date.now(); speicher.schreib("besuch", besuch); }
-document.addEventListener("click", merkeAktivitaet, {capture: true});
-document.addEventListener("visibilitychange", () => { if (!document.hidden) merkeAktivitaet(); });
-
-// Zeitpunkt, zu dem eine Wohnung gefunden wurde: Start des ersten Laufs an ihrem Fund-Tag
-function fundZeit(w) {
-  if (!w.gefunden_am) return 0;
-  const laeufe = (Z.daten?.laeufe || []).filter((l) => (l.start || "").startsWith(w.gefunden_am));
-  const start = laeufe.length ? laeufe[laeufe.length - 1].start : w.gefunden_am + "T00:00:00";
-  return new Date(start).getTime() || 0;
-}
+// „Neu“-Markierung: jede neu gefundene Wohnung bleibt hervorgehoben, bis sie mit „✓ Gesehen“
+// abgehakt wird (gespeichert in status.json, gilt auf allen Geräten). Wohnungen, die vor dem
+// Stichtag gefunden wurden, gelten als bereits gesehen.
+const NEU_STICHTAG = "2026-10-17";
 function istFrisch(w) {
-  if (besuch.basis) return fundZeit(w) > besuch.basis;
-  // erster Besuch auf diesem Gerät: Funde des letzten Laufs hervorheben
-  const l = (Z.daten?.laeufe || [])[0];
-  return !!(l && w.gefunden_am && l.start && w.gefunden_am >= l.start.slice(0, 10));
+  if (!w.gefunden_am || w.gefunden_am < NEU_STICHTAG) return false;
+  return !(Z.status.wohnungen[w.id] || {}).gesehen;
 }
 function statusVon(w) { return (Z.status.wohnungen[w.id] || {}).status || w.status; }
 function notizVon(w) { const s = Z.status.wohnungen[w.id]; return s && s.notiz != null ? s.notiz : w.notiz || ""; }
@@ -451,8 +432,8 @@ function zeichneListe(inhalt) {
       <option value="datum" ${Z.sortierung === "datum" ? "selected" : ""}>Neueste zuerst</option>
     </select></div>`;
   const frischAnzahl = liste.filter(istFrisch).length;
-  if (frischAnzahl) html += `<div class="hinweis"><span class="marke frisch">${frischAnzahl} neu für dich</span> ${besuch.basis
-    ? "seit deinem letzten Besuch am " + esc(zeit(new Date(besuch.basis).toISOString())) : "aus dem letzten Suchlauf"} – jeweils oben im Ort.</div>`;
+  if (frischAnzahl) html += `<div class="hinweis"><span class="marke frisch">${frischAnzahl} neu</span> – jeweils oben im Ort,
+    bleiben markiert bis „✓ Gesehen“. <a href="#" data-alle-gesehen="1">Alle als gesehen markieren</a></div>`;
   if (namen.length > 1) html += `<nav class="sprung">${namen.map((n) =>
     `<a href="#ort-${encodeURIComponent(n)}" data-ort-sprung="${esc(n)}">${esc(n || "?")} ${gruppen[n].length}${gruppen[n].some(istFrisch) ? ` <b>+${gruppen[n].filter(istFrisch).length}</b>` : ""}</a>`).join("")}</nav>`;
   if (wunsch && Z.reiter === "neu") html += `<div class="hinweis">Weitere Wünsche: ${esc(wunsch)}</div>`;
@@ -489,7 +470,7 @@ function karte(w) {
   const bild = sicherUrl(w.bild);
   const marken = (w.markierungen || []).map((m) => `<span class="marke ${m.art === "warn" ? "warn" : m.art === "gut" ? "gut" : ""}">${esc(m.text)}</span>`);
   if (w.offline_seit) marken.unshift(`<span class="marke fehler">offline seit ${esc(datum(w.offline_seit))}</span>`);
-  if (istFrisch(w)) marken.unshift(`<span class="marke frisch">neu für dich · ${esc(datum(w.gefunden_am).slice(0, 6))}</span>`);
+  if (istFrisch(w)) marken.unshift(`<span class="marke frisch">neu · ${esc(datum(w.gefunden_am).slice(0, 6))}</span>`);
   if (w.kategorie === "drei" && Z.reiter !== "drei") marken.unshift(`<span class="marke">3 Zimmer</span>`);
   if (!w.passt && st !== "neu") marken.push(`<span class="marke">passt nicht mehr: ${esc((w.ausschluss || []).join(", "))}</span>`);
   const ortName = `<b>${esc(w.ort)}${w.ortsteil ? " – " + esc(w.ortsteil) : ""}</b>`;
@@ -522,6 +503,7 @@ function karte(w) {
       <div class="hinweis">${hinweise.join(" · ")}</div>
       ${w.kurztext ? `<div class="kurztext">${esc(w.kurztext)}</div>` : ""}
       <div class="aktionen">${aktionen}
+        ${istFrisch(w) ? `<button class="knopf klein" data-aktion="gesehen">✓ Gesehen</button>` : ""}
         <button class="knopf klein" data-aktion="notiz">${notiz ? "Notiz ändern" : "Notiz"}</button>
         ${w.kurztext ? `<button class="knopf klein" data-aktion="mehr">Text</button>` : ""}
       </div>
@@ -531,8 +513,14 @@ function karte(w) {
 }
 
 document.addEventListener("click", (ev) => {
-  const t = ev.target.closest("[data-reiter],[data-reiter-link],[data-aktion],[data-springe]");
+  const t = ev.target.closest("[data-reiter],[data-reiter-link],[data-aktion],[data-springe],[data-alle-gesehen]");
   if (!t) return;
+  if (t.dataset.alleGesehen) {
+    ev.preventDefault();
+    const ids = listeFuer(Z.reiter).filter(istFrisch).map((w) => w.id);
+    if (ids.length && confirm(`${ids.length} Wohnung(en) als gesehen markieren?`)) { ids.forEach((id) => merkeStatus(id, {gesehen: true})); zeichne(); }
+    return;
+  }
   if (t.dataset.reiter || t.dataset.reiterLink) {
     ev.preventDefault(); Z.reiter = t.dataset.reiter || t.dataset.reiterLink; speicher.schreib("reiter", Z.reiter);
     zeichne(); window.scrollTo({top: 0}); return;
@@ -554,7 +542,8 @@ document.addEventListener("click", (ev) => {
   else if (a === "notiz-speichern") {
     const text = $(`#k-${CSS.escape(id)} textarea`).value.trim();
     Z.notizOffen = null; merkeStatus(id, {notiz: text}); zeichne(); melde("Notiz gespeichert.");
-  } else if (a === "mehr") karteEl.classList.toggle("offen");
+  } else if (a === "gesehen") { merkeStatus(id, {gesehen: true}); zeichne(); }
+  else if (a === "mehr") karteEl.classList.toggle("offen");
 });
 
 // ---------------------------------------------------------------------------
